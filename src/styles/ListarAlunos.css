@@ -1,0 +1,592 @@
+/* ============================
+   ListarAlunos — estilos
+   ============================ */
+
+.listar-alunos-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 0;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--color-text-soft);
+  margin: 4px 0 0;
+}
+
+/* Barra de Filtros */
+.filtros-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: var(--color-surface);
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.busca-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 250px;
+  background: var(--color-surface-alt);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+}
+
+.input-busca {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+}
+
+.input-busca::placeholder {
+  color: var(--color-text-soft);
+}
+
+.filtros-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filtro-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface-alt);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+}
+
+.filtro-select select {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 32px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.empty-icon {
+  color: var(--color-text-soft);
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  color: var(--color-text-soft);
+  margin: 0 0 20px;
+}
+
+/* Container de Alunos */
+.alunos-container {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+}
+
+/* Tabela */
+.alunos-table-wrapper {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.alunos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.alunos-table thead {
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.alunos-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.alunos-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  transition: var(--transition);
+}
+
+.alunos-table tbody tr:hover {
+  background: var(--color-surface-alt);
+}
+
+.alunos-table tbody tr.is-selected {
+  background: var(--color-primary-soft);
+}
+
+.alunos-table td {
+  padding: 16px;
+  vertical-align: middle;
+}
+
+/* Célula de Nome */
+.cell-nome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+}
+
+.aluno-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.aluno-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aluno-nome {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.aluno-id {
+  font-size: 11px;
+  color: var(--color-text-soft);
+}
+
+/* Célula de Email */
+.cell-email a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.cell-email a:hover {
+  text-decoration: underline;
+}
+
+/* Célula de Data */
+.cell-data {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.idade-badge {
+  background: var(--color-surface-alt);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--color-text-soft);
+  white-space: nowrap;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.badge-primary {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.badge-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-ativo {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.status-inativo {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+/* Ações */
+.cell-acoes {
+  text-align: right;
+}
+
+.acoes-group {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.btn-icon:hover {
+  background: var(--color-surface-alt);
+}
+
+.btn-icon-info:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-icon-edit:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-icon-delete:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* Sidebar de Detalhes */
+.detalhes-sidebar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.detalhes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+}
+
+.detalhes-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.btn-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-soft);
+  font-size: 24px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-close:hover {
+  color: var(--color-text);
+}
+
+.detalhes-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detalhes-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 auto;
+}
+
+.detalhes-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detalhes-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 0;
+}
+
+.detalhes-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
+.detalhes-item .label {
+  color: var(--color-text-soft);
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.detalhes-item .value {
+  color: var(--color-text);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.detalhes-item a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.detalhes-item a:hover {
+  text-decoration: underline;
+}
+
+.detalhes-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.btn-danger:hover {
+  background: var(--color-danger-soft);
+}
+
+/* Modal de Confirmação */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
+.modal-content p {
+  font-size: 13px;
+  color: var(--color-text-soft);
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-actions button {
+  flex: 1;
+}
+
+/* Responsivo */
+@media (max-width: 1200px) {
+  .alunos-container {
+    grid-template-columns: 1fr;
+  }
+
+  .detalhes-sidebar {
+    max-height: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .filtros-bar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .busca-box {
+    min-width: 100%;
+  }
+
+  .filtros-group {
+    width: 100%;
+  }
+
+  .filtro-select {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .alunos-table {
+    font-size: 12px;
+  }
+
+  .alunos-table th,
+  .alunos-table td {
+    padding: 12px 8px;
+  }
+
+  .cell-nome {
+    gap: 8px;
+  }
+
+  .aluno-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .acoes-group {
+    gap: 4px;
+  }
+
+  .btn-icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .alunos-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .alunos-table {
+    min-width: 600px;
+  }
+
+  .detalhes-sidebar {
+    display: none;
+  }
+
+  .modal-content {
+    max-width: 90%;
+  }
+}

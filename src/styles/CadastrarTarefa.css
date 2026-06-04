@@ -1,0 +1,460 @@
+/* ==========================================================================
+   CadastrarTarefa — Estilos Base e Formulários
+   ========================================================================== */
+
+.cadastrar-tarefa-page {
+  padding: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 28px 32px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.btn-back {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.btn-back:hover {
+  background: var(--color-surface-alt);
+  border-color: var(--color-text-soft);
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--color-text-soft);
+  margin-top: 4px;
+}
+
+.tarefa-container {
+  padding: 32px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.tarefa-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+/* Indicador de Etapas */
+.etapas-indicator {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.etapa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.5;
+  transition: var(--transition);
+}
+
+.etapa.ativa {
+  opacity: 1;
+}
+
+.etapa span {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  border: 2px solid var(--color-border);
+  transition: var(--transition);
+}
+
+.etapa.ativa span {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.etapa label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.etapa-linha {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+}
+
+/* Estrutura de inputs customizados */
+.input-group {
+  margin-bottom: 24px;
+}
+
+.input-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.field-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  color: var(--color-text-soft);
+  transition: var(--transition);
+}
+
+.field-container input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 14px;
+  outline: none;
+}
+
+.field-container input[type="date"] {
+  font-family: inherit;
+}
+
+.textarea-container {
+  align-items: flex-start;
+  padding: 12px 16px;
+}
+
+.field-container textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 14px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.field-container:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.field-error {
+  border-color: var(--color-danger) !important;
+  background: var(--color-danger-soft) !important;
+}
+
+/* Alertas */
+.alert {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.alert-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+.alert-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+/* Seções */
+.form-section {
+  margin-bottom: 28px;
+}
+
+.form-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: var(--color-text-soft);
+  margin: 0;
+}
+
+/* Container de Busca */
+.busca-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface-alt);
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  color: var(--color-text-soft);
+}
+
+.input-busca {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+}
+
+/* Listagem de Professores */
+.professores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.professores-grid.has-error {
+  border: 2px solid var(--color-danger);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+}
+
+.professor-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.professor-card input[type="radio"] {
+  margin-top: 4px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.professor-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.professor-card.is-selected {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.professor-card-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.professor-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--gradient-primary, var(--color-primary));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.professor-dados {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.professor-nome {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.professor-materia {
+  font-size: 11px;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.professor-id {
+  font-size: 10px;
+  color: var(--color-text-soft);
+  font-style: italic;
+}
+
+/* Mensagem de Vazio */
+.empty-message {
+  padding: 40px 20px;
+  text-align: center;
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-soft);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+/* Resumo Final */
+.resumo-tarefa {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 28px;
+}
+
+.resumo-tarefa h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  margin: 0 0 16px 0;
+  letter-spacing: 0.5px;
+}
+
+.resumo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.resumo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resumo-item .label {
+  font-size: 11px;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+}
+
+.resumo-item .value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.text-primary {
+  color: var(--color-primary) !important;
+}
+
+/* Mensagens de Erro por campo */
+.error-msg {
+  display: block;
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+/* Botões de Ação */
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.form-actions button {
+  flex: 1;
+}
+
+/* Animação suave na troca de passos */
+.form-step-animation {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 16px;
+  }
+
+  .tarefa-container {
+    padding: 20px 16px;
+  }
+
+  .tarefa-form {
+    padding: 20px;
+  }
+
+  .etapas-indicator {
+    gap: 12px;
+  }
+
+  .professores-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resumo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+}

@@ -1,0 +1,264 @@
+/* ==========================================================================
+   MarcarPresenca — Estilos Operacionais e de Layout
+   ========================================================================== */
+
+.marcar-presenca-page {
+  padding: 0;
+}
+
+.presenca-container {
+  padding: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.presenca-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+/* Grid de Grade de Horários */
+.horarios-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.horarios-grid.has-error {
+  border: 1px solid var(--color-danger);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+}
+
+.horario-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.horario-card input[type="radio"] {
+  margin-top: 4px;
+  accent-color: var(--color-primary);
+}
+
+.horario-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.horario-card.is-selected {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.horario-card-content {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.horario-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.horario-card.is-selected .horario-icon {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.horario-dados {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.horario-turma {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.horario-disc {
+  font-size: 12px;
+  color: var(--color-text-soft);
+}
+
+.horario-tempo {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-top: 4px;
+}
+
+/* Header interno do Passo 2 */
+.form-section-chamada {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.teacher-badge {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-soft);
+}
+
+/* Estrutura da Tabela de Chamada */
+.tabela-chamada-wrapper {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.tabela-chamada {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.tabela-chamada th {
+  background: var(--color-surface-alt);
+  padding: 14px 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tabela-chamada td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  transition: var(--transition);
+}
+
+.linha-ausente td {
+  background: var(--color-danger-soft);
+}
+
+.aluno-info-tabela {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aluno-nome-tab {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.aluno-id-tab {
+  font-size: 11px;
+  color: var(--color-text-soft);
+}
+
+/* Botões de Toggle de Presença */
+.toggle-presenca-container {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.btn-toggle-p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  transition: var(--transition);
+}
+
+.btn-toggle-p.presente:hover {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.btn-toggle-p.presente.ativo {
+  background: var(--color-success);
+  border-color: var(--color-success);
+  color: #fff;
+}
+
+.btn-toggle-p.ausente:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.btn-toggle-p.ausente.ativo {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+}
+
+/* Campo de Input na Tabela */
+.input-table-obs {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.input-table-obs:focus {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .form-section-chamada {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .horarios-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tabela-chamada th:nth-child(3),
+  .tabela-chamada td:nth-child(3) {
+    display: none; /* Oculta observações em telas muito pequenas para manter layout */
+  }
+}

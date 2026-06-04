@@ -1,0 +1,174 @@
+/* ==========================================================================
+   LancarNota — Estilos Operacionais e de Layout
+   ========================================================================== */
+
+.lancar-nota-page {
+  padding: 0;
+}
+
+.nota-container {
+  padding: 32px;
+  max-width: 950px;
+  margin: 0 auto;
+}
+
+.nota-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+/* Grid de submissões pendentes */
+.submissoes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.submissoes-grid.has-error {
+  border: 1px solid var(--color-danger);
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+}
+
+.submissao-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  background: var(--color-surface-alt);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.submissao-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--color-primary);
+}
+
+.submissao-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.submissao-card.is-selected {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.submissao-card-body {
+  display: flex;
+  gap: 12px;
+}
+
+.submissao-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.submissao-card.is-selected .submissao-icon {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.submissao-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.student-id-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.submissao-preview {
+  font-size: 12px;
+  color: var(--color-text-soft);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.delivery-date {
+  font-size: 11px;
+  color: var(--color-text-soft);
+  opacity: 0.8;
+}
+
+/* Container de revisão de texto do aluno */
+.revisao-trabalho-box {
+  background: var(--color-surface-alt);
+  border-left: 4px solid var(--color-primary);
+  padding: 20px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  margin-bottom: 28px;
+}
+
+.revisao-trabalho-box h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.txt-conteudo {
+  font-size: 14px;
+  color: var(--color-text);
+  line-height: 1.5;
+  font-style: italic;
+  margin: 0 0 14px 0;
+}
+
+.link-arquivo-aluno {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.link-arquivo-aluno:hover {
+  text-decoration: underline;
+  color: var(--color-text);
+}
+
+/* Estrutura de colunas alinhadas */
+.row-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.text-highlight {
+  color: var(--color-primary);
+}
+
+/* Responsividade estrutural */
+@media (max-width: 768px) {
+  .row-inputs {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .submissoes-grid {
+    grid-template-columns: 1fr;
+  }
+}

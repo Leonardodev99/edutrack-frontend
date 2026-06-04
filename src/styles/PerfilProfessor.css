@@ -1,0 +1,256 @@
+/* ==========================================================================
+   PerfilProfessor — Estilos de Escopo do Módulo do Professor
+   ========================================================================== */
+
+.perfil-professor-page {
+  padding: 0;
+}
+
+.page-header-perfil {
+  margin-bottom: 28px;
+}
+
+.perfil-grid-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
+  align-items: flex-start;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Card Principal */
+.perfil-card-main {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.avatar-circle-prof {
+  width: 90px;
+  height: 90px;
+  background: var(--color-primary); /* Roxo institucional */
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+
+.profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 8px 0;
+}
+
+.profile-badge-role-prof {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 30px;
+  margin-bottom: 12px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-soft);
+}
+
+.status-dot.online {
+  width: 8px;
+  height: 8px;
+  background: var(--color-success);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.divider-perfil {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 24px 0;
+}
+
+.mini-meta-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-soft);
+}
+
+/* Coluna da Direita */
+.perfil-details-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.details-section-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+}
+
+.section-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 20px 0;
+}
+
+/* Grid de Exibição dos Dados */
+.info-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.info-field-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label-view {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.field-value-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.field-value-container svg {
+  color: var(--color-primary);
+}
+
+/* Bloco das Disciplinas Atribuidas */
+.disciplinas-prof-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.disciplina-prof-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.disciplina-prof-tag svg {
+  color: var(--color-primary);
+}
+
+/* Logs e Tabelas */
+.section-card-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-card-header-flex .section-card-title {
+  margin: 0;
+}
+
+.security-shield-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.table-logs-wrapper {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.table-logs {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.table-logs th {
+  background: var(--color-surface-alt);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table-logs td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-soft);
+}
+
+.font-mono {
+  font-family: monospace;
+}
+
+/* Responsividade */
+@media (max-width: 900px) {
+  .perfil-grid-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .info-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}

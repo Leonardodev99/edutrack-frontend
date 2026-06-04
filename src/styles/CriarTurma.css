@@ -1,0 +1,334 @@
+/* ============================
+   CriarTurma — estilos
+   ============================ */
+
+.criar-turma-page {
+  padding: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 28px 32px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.btn-back {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.btn-back:hover {
+  background: var(--color-surface-alt);
+  border-color: var(--color-text-soft);
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--color-text-soft);
+  margin-top: 4px;
+}
+
+.criar-turma-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 32px;
+  padding: 32px;
+  max-width: 1200px;
+}
+
+.criar-turma-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+/* Alertas */
+.alert {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.alert-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+.alert-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+/* Seções de Formulário */
+.form-section {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form-section:last-of-type {
+  border-bottom: none;
+}
+
+.form-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.section-desc {
+  font-size: 13px;
+  color: var(--color-text-soft);
+  margin: 0;
+}
+
+/* Grupos de Formulário */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 8px;
+  text-transform: none;
+}
+
+.input,
+select {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-surface-alt);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.input.is-invalid {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.input.is-disabled {
+  background: var(--color-surface-alt);
+  color: var(--color-text-soft);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.error-msg {
+  display: block;
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.input-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-soft);
+  margin-top: 6px;
+}
+
+/* Linha com 2 Colunas */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Empty State */
+.empty-professores {
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-soft);
+  font-size: 13px;
+}
+
+/* Botões de Ação */
+.form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.form-actions button {
+  flex: 1;
+}
+
+/* Card de Resumo */
+.form-resumo {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  height: fit-content;
+  position: sticky;
+  top: 28px;
+}
+
+.form-resumo h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 16px;
+}
+
+.resumo-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.resumo-item:last-child {
+  border-bottom: none;
+}
+
+.resumo-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-soft);
+  text-transform: uppercase;
+}
+
+.resumo-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: right;
+  word-break: break-word;
+}
+
+.codigo-badge {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.resumo-info {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-top: 16px;
+  font-size: 12px;
+}
+
+.resumo-info strong {
+  color: var(--color-primary);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.resumo-info p {
+  margin: 0;
+  color: var(--color-text-soft);
+  line-height: 1.4;
+}
+
+/* Responsivo */
+@media (max-width: 1024px) {
+  .criar-turma-container {
+    grid-template-columns: 1fr;
+  }
+
+  .form-resumo {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px 16px;
+  }
+
+  .criar-turma-container {
+    padding: 20px 16px;
+    gap: 20px;
+  }
+
+  .criar-turma-form {
+    padding: 20px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-section {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .form-actions button {
+    width: 100%;
+  }
+
+  .resumo-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .resumo-value {
+    text-align: left;
+  }
+}
