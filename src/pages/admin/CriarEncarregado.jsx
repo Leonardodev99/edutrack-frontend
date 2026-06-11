@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Plus, X } from "lucide-react";
-import { criarEncarregado, gerarMatriculaEncarregado, verificarEmailExistente } from "../../utils/mockUsers";
-import { alunosStore } from "../../utils/adminMockData";
+import { ArrowLeft, Save, Loader } from "lucide-react";
+import api from "../../services/api";
 import "../../styles/CriarEncarregado.css";
 
 export default function CriarEncarregado() {
@@ -19,18 +18,52 @@ export default function CriarEncarregado() {
 
   // Dados do Encarregado
   const [encarregadoData, setEncarregadoData] = useState({
-    matricula: gerarMatriculaEncarregado(),
     telefone: "",
-    telefonePrincipal: "",
-    estudantes: [], // IDs dos alunos
+    students: [], // IDs dos alunos selecionados
   });
 
+  const [alunosDisponiveis, setAlunosDisponiveis] = useState([]);
   const [erros, setErros] = useState({});
   const [carregando, setCarregando] = useState(false);
+  const [carregandoAlunos, setCarregandoAlunos] = useState(true);
   const [sucesso, setSucesso] = useState(false);
 
-  // Obter lista de alunos disponíveis
-  const alunosDisponiveis = alunosStore.list();
+  // ID do utilizador retornado após guardar a Etapa 1
+  const [createdUserId, setCreatedUserId] = useState(null);
+
+  // 🔄 Buscar alunos reais do backend ao montar o componente
+  useEffect(() => {
+    async function carregarAlunos() {
+      setCarregandoAlunos(true);
+      try {
+        const token = localStorage.getItem("@EduTrack:token");
+
+        // GET /students - retorna todos os alunos usando a API configurada
+        const response = await api.get("/students", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        console.log("Alunos carregados:", response.data);
+
+        // Mapear os alunos para ter a estrutura correta
+        const alunos = response.data.map((aluno) => ({
+          id: aluno.id,
+          nome: aluno.user?.nome || aluno.nome || "Sem nome",
+          email: aluno.user?.email || aluno.email,
+          matricula: aluno.matricula,
+          user: aluno.user,
+        }));
+
+        setAlunosDisponiveis(alunos);
+      } catch (error) {
+        console.error("Erro ao buscar alunos:", error);
+        console.error("Resposta de erro:", error.response?.data);
+      } finally {
+        setCarregandoAlunos(false);
+      }
+    }
+    carregarAlunos();
+  }, []);
 
   // Validação da Etapa 1 (Usuário)
   function validarEtapa1() {
@@ -38,16 +71,16 @@ export default function CriarEncarregado() {
 
     if (!userData.nome.trim()) {
       novosErros.nome = "Nome é obrigatório";
-    } else if (userData.nome.trim().length < 3) {
-      novosErros.nome = "Nome deve ter pelo menos 3 caracteres";
+    } else if (userData.nome.trim().length < 5) {
+      novosErros.nome = "O nome deve ter entre 5 e 150 caracteres";
+    } else if (/^\d/.test(userData.nome.trim())) {
+      novosErros.nome = "O nome não pode começar com um número";
     }
 
     if (!userData.email.trim()) {
       novosErros.email = "Email é obrigatório";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
       novosErros.email = "Email inválido";
-    } else if (verificarEmailExistente(userData.email)) {
-      novosErros.email = "Este email já está registado";
     }
 
     if (!userData.senha) {
@@ -67,35 +100,58 @@ export default function CriarEncarregado() {
   // Validação da Etapa 2 (Encarregado)
   function validarEtapa2() {
     const novosErros = {};
+    const telefoneLimpo = encarregadoData.telefone.replace(/\s/g, "");
 
-    if (!encarregadoData.matricula.trim()) {
-      novosErros.matricula = "Matrícula é obrigatória";
-    }
-
-    if (!encarregadoData.telefone.trim()) {
+    if (!telefoneLimpo) {
       novosErros.telefone = "Telefone é obrigatório";
-    } else if (!/^\d{9}$/.test(encarregadoData.telefone.replace(/\s/g, ""))) {
-      novosErros.telefone = "Telefone deve ter 9 dígitos";
+    } else if (telefoneLimpo.length !== 9) {
+      novosErros.telefone = "O telefone deve ter exatamente 9 dígitos";
+    } else if (!/^9\d{8}$/.test(telefoneLimpo)) {
+      novosErros.telefone = "O telefone em Angola deve começar com o dígito 9";
     }
 
-    if (encarregadoData.estudantes.length === 0) {
-      novosErros.estudantes = "Selecione pelo menos um aluno";
+    if (encarregadoData.students.length === 0) {
+      novosErros.students = "Selecione pelo menos um aluno";
     }
 
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar para próxima etapa
-  function avancar() {
-    if (etapa === 1) {
-      if (validarEtapa1()) {
-        setEtapa(2);
+  // Avançar para a Etapa 2 criando primeiro o utilizador no backend
+  async function avancar() {
+    if (!validarEtapa1()) return;
+
+    setCarregando(true);
+    setErros({});
+
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+
+      // Executa o POST para a rota global de utilizadores, passando o tipo correto
+      const response = await api.post("/users", {
+        nome: userData.nome,
+        email: userData.email,
+        senha: userData.senha,
+        tipo: "encarregado",
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Guardamos o ID gerado pelo banco para a próxima fase
+      setCreatedUserId(response.data.id);
+      setEtapa(2);
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data.error) {
+        setErros({ email: error.response.data.error });
+      } else {
+        setErros({ geral: "Erro ao validar utilizador no servidor." });
       }
+    } finally {
+      setCarregando(false);
     }
   }
 
-  // Voltar para etapa anterior
   function voltar() {
     if (etapa === 2) {
       setEtapa(1);
@@ -104,55 +160,62 @@ export default function CriarEncarregado() {
     }
   }
 
-  // Adicionar/Remover aluno
   function toggleEstudante(alunoId) {
     setEncarregadoData((prev) => {
-      const estudantes = prev.estudantes.includes(alunoId)
-        ? prev.estudantes.filter((id) => id !== alunoId)
-        : [...prev.estudantes, alunoId];
-      return { ...prev, estudantes };
+      const students = prev.students.includes(alunoId)
+        ? prev.students.filter((id) => id !== alunoId)
+        : [...prev.students, alunoId];
+      return { ...prev, students };
     });
   }
 
-  // Formatar telefone
   function formatarTelefone(valor) {
     const digitos = valor.replace(/\D/g, "");
     if (digitos.length <= 3) return digitos;
-    if (digitos.length <= 6) return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
+    if (digitos.length <= 6)
+      return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
     return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6, 9)}`;
   }
 
-  // Submeter formulário
+  // 🚀 Submissão Final para a rota de encarregados
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (etapa === 1) {
-      avancar();
+      await avancar();
       return;
     }
 
-    if (!validarEtapa2()) {
-      return;
-    }
+    if (!validarEtapa2()) return;
 
     setCarregando(true);
+    setErros({});
 
     try {
-      // Simula delay de API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const token = localStorage.getItem("@EduTrack:token");
 
-      const resultado = criarEncarregado(userData, encarregadoData);
+      // Enviamos apenas o user_id, telefone e o array de alunos associados
+      const payload = {
+        user_id: createdUserId,
+        telefone: encarregadoData.telefone.replace(/\s/g, ""), 
+        students: encarregadoData.students, 
+      };
 
-      if (resultado.sucesso) {
+      const response = await api.post("/guardians", payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 201) {
         setSucesso(true);
         setTimeout(() => {
           navigate("/admin/encarregados");
         }, 1500);
-      } else {
-        setErros({ geral: resultado.erro });
       }
     } catch (error) {
-      setErros({ geral: "Erro ao criar encarregado. Tente novamente." });
+      const msgErro =
+        error.response?.data?.error || "Erro ao vincular dados do encarregado.";
+      setErros({ geral: msgErro });
+      console.error("Erro ao criar encarregado:", error);
     } finally {
       setCarregando(false);
     }
@@ -161,7 +224,7 @@ export default function CriarEncarregado() {
   return (
     <div className="criar-encarregado-page">
       <div className="page-header">
-        <button className="btn-back" onClick={voltar}>
+        <button type="button" className="btn-back" onClick={voltar}>
           <ArrowLeft size={20} />
         </button>
         <div>
@@ -189,14 +252,8 @@ export default function CriarEncarregado() {
             </div>
           </div>
 
-          {/* Mensagem de Erro Geral */}
-          {erros.geral && (
-            <div className="alert alert-danger">
-              {erros.geral}
-            </div>
-          )}
+          {erros.geral && <div className="alert alert-danger">{erros.geral}</div>}
 
-          {/* Mensagem de Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
               ✓ Encarregado criado com sucesso! Redirecionando...
@@ -220,7 +277,10 @@ export default function CriarEncarregado() {
                   className={`input ${erros.nome ? "is-invalid" : ""}`}
                   placeholder="Ana Maria Costa"
                   value={userData.nome}
-                  onChange={(e) => setUserData({ ...userData, nome: e.target.value })}
+                  onChange={(e) =>
+                    setUserData({ ...userData, nome: e.target.value })
+                  }
+                  disabled={carregando}
                 />
                 {erros.nome && <span className="error-msg">{erros.nome}</span>}
               </div>
@@ -230,9 +290,12 @@ export default function CriarEncarregado() {
                 <input
                   type="email"
                   className={`input ${erros.email ? "is-invalid" : ""}`}
-                  placeholder="ana.costa@edutrack.pt"
+                  placeholder="ana.costa@escola.com"
                   value={userData.email}
-                  onChange={(e) => setUserData({ ...userData, email: e.target.value })}
+                  onChange={(e) =>
+                    setUserData({ ...userData, email: e.target.value })
+                  }
+                  disabled={carregando}
                 />
                 {erros.email && <span className="error-msg">{erros.email}</span>}
               </div>
@@ -245,21 +308,32 @@ export default function CriarEncarregado() {
                     className={`input ${erros.senha ? "is-invalid" : ""}`}
                     placeholder="••••••••"
                     value={userData.senha}
-                    onChange={(e) => setUserData({ ...userData, senha: e.target.value })}
+                    onChange={(e) =>
+                      setUserData({ ...userData, senha: e.target.value })
+                    }
+                    disabled={carregando}
                   />
-                  {erros.senha && <span className="error-msg">{erros.senha}</span>}
+                  {erros.senha && (
+                    <span className="error-msg">{erros.senha}</span>
+                  )}
                 </div>
 
                 <div className="form-group">
                   <label className="label">Confirmar Senha *</label>
                   <input
                     type="password"
-                    className={`input ${erros.confirmarSenha ? "is-invalid" : ""}`}
+                    className={`input ${
+                      erros.confirmarSenha ? "is-invalid" : ""
+                    }`}
                     placeholder="••••••••"
                     value={userData.confirmarSenha}
                     onChange={(e) =>
-                      setUserData({ ...userData, confirmarSenha: e.target.value })
+                      setUserData({
+                        ...userData,
+                        confirmarSenha: e.target.value,
+                      })
                     }
+                    disabled={carregando}
                   />
                   {erros.confirmarSenha && (
                     <span className="error-msg">{erros.confirmarSenha}</span>
@@ -280,71 +354,33 @@ export default function CriarEncarregado() {
               </div>
 
               <div className="form-group">
-                <label className="label">Email (Leitura) *</label>
+                <label className="label">Utilizador Vinculado (Apenas Leitura)</label>
                 <input
-                  type="email"
+                  type="text"
                   className="input is-disabled"
-                  value={userData.email}
+                  value={`${userData.nome} (${userData.email})`}
                   disabled
                 />
-                <span className="input-hint">Email do usuário criado</span>
               </div>
 
               <div className="form-group">
-                <label className="label">Matrícula *</label>
+                <label className="label">Telefone Principal *</label>
                 <input
-                  type="text"
-                  className={`input ${erros.matricula ? "is-invalid" : ""}`}
-                  placeholder="ENC-2024-001"
-                  value={encarregadoData.matricula}
+                  type="tel"
+                  className={`input ${erros.telefone ? "is-invalid" : ""}`}
+                  placeholder="9XX XXX XXX"
+                  value={encarregadoData.telefone}
                   onChange={(e) =>
-                    setEncarregadoData({ ...encarregadoData, matricula: e.target.value })
+                    setEncarregadoData({
+                      ...encarregadoData,
+                      telefone: formatarTelefone(e.target.value),
+                    })
                   }
+                  disabled={carregando}
                 />
-                {erros.matricula && (
-                  <span className="error-msg">{erros.matricula}</span>
+                {erros.telefone && (
+                  <span className="error-msg">{erros.telefone}</span>
                 )}
-                <span className="input-hint">
-                  Número único do encarregado no sistema
-                </span>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="label">Telefone Principal *</label>
-                  <input
-                    type="tel"
-                    className={`input ${erros.telefone ? "is-invalid" : ""}`}
-                    placeholder="961 100 200"
-                    value={encarregadoData.telefone}
-                    onChange={(e) =>
-                      setEncarregadoData({
-                        ...encarregadoData,
-                        telefone: formatarTelefone(e.target.value),
-                      })
-                    }
-                  />
-                  {erros.telefone && (
-                    <span className="error-msg">{erros.telefone}</span>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="label">Telefone Secundário</label>
-                  <input
-                    type="tel"
-                    className="input"
-                    placeholder="913 000 000"
-                    value={encarregadoData.telefonePrincipal}
-                    onChange={(e) =>
-                      setEncarregadoData({
-                        ...encarregadoData,
-                        telefonePrincipal: formatarTelefone(e.target.value),
-                      })
-                    }
-                  />
-                  <span className="input-hint">Opcional</span>
-                </div>
               </div>
 
               <div className="form-group">
@@ -353,7 +389,12 @@ export default function CriarEncarregado() {
                   Selecione os alunos que este encarregado representa
                 </p>
 
-                {alunosDisponiveis.length === 0 ? (
+                {carregandoAlunos ? (
+                  <div className="loading-alunos">
+                    <Loader size={24} className="spinner" />
+                    <p>A carregar alunos...</p>
+                  </div>
+                ) : alunosDisponiveis.length === 0 ? (
                   <div className="empty-alunos">
                     <p>Nenhum aluno disponível no sistema</p>
                   </div>
@@ -363,27 +404,28 @@ export default function CriarEncarregado() {
                       <label
                         key={aluno.id}
                         className={`estudante-checkbox ${
-                          encarregadoData.estudantes.includes(aluno.id)
+                          encarregadoData.students.includes(aluno.id)
                             ? "is-checked"
                             : ""
                         }`}
                       >
                         <input
                           type="checkbox"
-                          checked={encarregadoData.estudantes.includes(aluno.id)}
+                          checked={encarregadoData.students.includes(aluno.id)}
                           onChange={() => toggleEstudante(aluno.id)}
+                          disabled={carregando}
                         />
                         <span className="checkbox-label">
                           <strong>{aluno.nome}</strong>
-                          <small>{aluno.id}</small>
+                          <small>Matrícula: {aluno.matricula || "—"}</small>
                         </span>
                       </label>
                     ))}
                   </div>
                 )}
 
-                {erros.estudantes && (
-                  <span className="error-msg">{erros.estudantes}</span>
+                {erros.students && (
+                  <span className="error-msg">{erros.students}</span>
                 )}
               </div>
             </>
@@ -397,7 +439,7 @@ export default function CriarEncarregado() {
               onClick={voltar}
               disabled={carregando}
             >
-              Cancelar
+              {etapa === 2 ? "Voltar" : "Cancelar"}
             </button>
 
             {etapa === 1 ? (
@@ -407,7 +449,13 @@ export default function CriarEncarregado() {
                 onClick={avancar}
                 disabled={carregando}
               >
-                Continuar
+                {carregando ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Loader size={16} className="animate-spin" /> Processando...
+                  </span>
+                ) : (
+                  "Avançar Passo"
+                )}
               </button>
             ) : (
               <button
@@ -415,8 +463,17 @@ export default function CriarEncarregado() {
                 className="btn btn-hero"
                 disabled={carregando}
               >
-                <Save size={18} />
-                {carregando ? "Criando..." : "Criar Encarregado"}
+                {carregando ? (
+                  <>
+                    <Loader size={18} className="spinner-small animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    Criar Encarregado
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -435,22 +492,20 @@ export default function CriarEncarregado() {
               <span className="resumo-value">{userData.email}</span>
             </div>
             <div className="resumo-item">
-              <span className="resumo-label">Matrícula:</span>
-              <span className="resumo-value">{encarregadoData.matricula}</span>
-            </div>
-            <div className="resumo-item">
               <span className="resumo-label">Telefone:</span>
               <span className="resumo-value">{encarregadoData.telefone}</span>
             </div>
             <div className="resumo-section">
               <span className="resumo-label">Alunos Associados:</span>
               <div className="alunos-resumo">
-                {encarregadoData.estudantes.length > 0 ? (
-                  encarregadoData.estudantes.map((alunoId) => {
-                    const aluno = alunosDisponiveis.find((a) => a.id === alunoId);
+                {encarregadoData.students.length > 0 ? (
+                  encarregadoData.students.map((alunoId) => {
+                    const aluno = alunosDisponiveis.find(
+                      (a) => a.id === alunoId
+                    );
                     return (
                       <span key={alunoId} className="badge badge-primary">
-                        {aluno?.nome}
+                        {aluno?.nome || "Aluno"}
                       </span>
                     );
                   })

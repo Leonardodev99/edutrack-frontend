@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   GraduationCap,
   Lock,
@@ -8,18 +8,30 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import api from "../services/api.js";
 import "../styles/ResetPassword.css";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState(false);
+  const [carregando, setCarregando] = useState(false);
 
-  function handleSubmit(e) {
+  // Se não houver token na URL, redireciona imediatamente
+  useEffect(() => {
+    if (!token) {
+      navigate("/forgot-password", { replace: true });
+    }
+  }, [token, navigate]);
+
+  async function handleSubmit(e) {
     e.preventDefault();
     setErro("");
 
@@ -32,9 +44,19 @@ export default function ResetPassword() {
       return;
     }
 
-    // Mock — sem backend
-    setSucesso(true);
-    setTimeout(() => navigate("/login"), 2500);
+    setCarregando(true);
+    try {
+      await api.post("/passwords/reset", { token, password });
+      setSucesso(true);
+      setTimeout(() => navigate("/login"), 2500);
+    } catch (error) {
+      const mensagem =
+        error.response?.data?.error ||
+        "Erro ao redefinir a palavra-passe. Tente novamente.";
+      setErro(mensagem);
+    } finally {
+      setCarregando(false);
+    }
   }
 
   return (
@@ -84,6 +106,7 @@ export default function ResetPassword() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    disabled={carregando}
                   />
                   <button
                     type="button"
@@ -107,6 +130,7 @@ export default function ResetPassword() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
+                    disabled={carregando}
                   />
                   <button
                     type="button"
@@ -121,8 +145,12 @@ export default function ResetPassword() {
 
               {erro && <div className="reset-error">{erro}</div>}
 
-              <button type="submit" className="btn btn-hero btn-block">
-                Redefinir palavra-passe
+              <button
+                type="submit"
+                className="btn btn-hero btn-block"
+                disabled={carregando}
+              >
+                {carregando ? "A redefinir..." : "Redefinir palavra-passe"}
               </button>
 
               <div className="reset-foot">
@@ -137,8 +165,8 @@ export default function ResetPassword() {
               </div>
               <h2>Palavra-passe alterada</h2>
               <p className="reset-form-sub">
-                A sua palavra-passe foi redefinida com sucesso. Será redirecionado
-                para a página de login em instantes.
+                A sua palavra-passe foi redefinida com sucesso. Será
+                redirecionado para a página de login em instantes.
               </p>
               <Link to="/login" className="btn btn-hero btn-block">
                 Ir para o login

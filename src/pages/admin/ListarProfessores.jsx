@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Plus,
@@ -11,17 +11,21 @@ import {
   Mail,
   BookOpen,
 } from "lucide-react";
-import { professoresStore, usersStore } from "../../utils/mockUsers.js";
+import api from "../../services/api"; // Importa a sua instância do Axios
 import "../../styles/ListarProfessores.css";
 
 export default function ListarProfessores() {
-  const [professores, setProfessores] = useState(professoresStore.list());
+  const [professores, setProfessores] = useState([]);
   const [busca, setBusca] = useState("");
   const [filtroDepartamento, setFiltroDepartamento] = useState("todos");
   const [ordenacao, setOrdenacao] = useState("nome");
   const [professorSelecionado, setProfessorSelecionado] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [professorParaDeletar, setProfessorParaDeletar] = useState(null);
+  
+  // Estados de carregamento e feedback
+  const [carregando, setCarregando] = useState(true);
+  const [erroGeral, setErroGeral] = useState("");
 
   const departamentosDisponiveis = [
     "Ciências Exatas",
@@ -32,25 +36,46 @@ export default function ListarProfessores() {
     "Artes",
   ];
 
-  // Obter dados do usuário associado
-  function obterUsuarioProfessor(userId) {
-    return usersStore.get(userId) || null;
+  // Função para buscar dados da API
+  async function carregarProfessores() {
+    setCarregando(true);
+    setErroGeral("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      // Conforme o arquivo de rotas, GET /teachers está aberto a todos autenticados
+      const response = await api.get("/teachers", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setProfessores(response.data);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar lista de professores.";
+      setErroGeral(msg);
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  // Filtrar e ordenar professores
+  // Carrega ao montar a tela
+  useEffect(() => {
+    carregarProfessores();
+  }, []);
+
+  // Filtrar e ordenar professores de forma reativa usando useMemo
   const professoresFiltrados = useMemo(() => {
-    let resultado = professores.map((prof) => ({
-      ...prof,
-      user: obterUsuarioProfessor(prof.user_id),
-    }));
+    // No seu backend, o include popula 'user' (ex: prof.user.nome)
+    let resultado = [...professores];
 
     // Filtro de busca
     if (busca) {
+      const buscaLower = busca.toLowerCase();
       resultado = resultado.filter(
         (p) =>
-          p.user?.nome.toLowerCase().includes(busca.toLowerCase()) ||
-          p.user?.email.toLowerCase().includes(busca.toLowerCase()) ||
-          p.matricula.toLowerCase().includes(busca.toLowerCase())
+          p.user?.nome?.toLowerCase().includes(buscaLower) ||
+          p.user?.email?.toLowerCase().includes(buscaLower) ||
+          p.id?.toString().includes(buscaLower) ||
+          p.disciplina?.toLowerCase().includes(buscaLower)
       );
     }
 
@@ -67,7 +92,7 @@ export default function ListarProfessores() {
         case "email":
           return (a.user?.email || "").localeCompare(b.user?.email || "");
         case "departamento":
-          return a.departamento.localeCompare(b.departamento);
+          return (a.departamento || "").localeCompare(b.departamento || "");
         default:
           return 0;
       }
@@ -76,24 +101,42 @@ export default function ListarProfessores() {
     return resultado;
   }, [professores, busca, filtroDepartamento, ordenacao]);
 
-  // Deletar professor
-  function deletarProfessor(id, userId) {
-    setProfessorParaDeletar({ id, userId });
+  // Disparar fluxo de exclusão
+  function deletarProfessor(id) {
+    setProfessorParaDeletar(id);
     setShowConfirm(true);
   }
 
-  function confirmarDelete() {
-    if (professorParaDeletar) {
-      // Remove professor
-      professoresStore.remove(professorParaDeletar.id);
-      // Remove usuário associado
-      usersStore.remove(professorParaDeletar.userId);
+  // Confirmar exclusão no Back-end (Apenas Gestor pode remover)
+  async function confirmarDelete() {
+    if (!professorParaDeletar) return;
+
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
       
-      setProfessores(professoresStore.list());
+      // Chama a rota DELETE /teachers/:id
+      await api.delete(`/teachers/${professorParaDeletar}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Atualiza o estado removendo localmente ou recarregando da API
+      setProfessores((prev) => prev.filter((p) => p.id !== professorParaDeletar));
       setShowConfirm(false);
       setProfessorParaDeletar(null);
       setProfessorSelecionado(null);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Apenas gestores podem eliminar professores.";
+      alert(msg);
+      setShowConfirm(false);
     }
+  }
+
+  if (carregando) {
+    return (
+      <div className="listar-professores-page">
+        <p className="page-subtitle">A carregar professores do sistema...</p>
+      </div>
+    );
   }
 
   return (
@@ -112,6 +155,8 @@ export default function ListarProfessores() {
         </Link>
       </div>
 
+      {erroGeral && <div className="alert alert-danger">{erroGeral}</div>}
+
       {/* Filtros e Busca */}
       <div className="filtros-bar">
         <div className="busca-box">
@@ -119,7 +164,7 @@ export default function ListarProfessores() {
           <input
             type="text"
             className="input-busca"
-            placeholder="Buscar por nome, email ou matrícula..."
+            placeholder="Buscar por nome, email ou ID..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -161,11 +206,6 @@ export default function ListarProfessores() {
               ? "Tente ajustar os filtros ou a busca"
               : "Crie o primeiro professor para começar"}
           </p>
-          {!busca && (
-            <Link to="/admin/professores/criar" className="btn btn-primary">
-              Criar Professor
-            </Link>
-          )}
         </div>
       )}
 
@@ -178,7 +218,7 @@ export default function ListarProfessores() {
                 <tr>
                   <th>Nome</th>
                   <th>Email</th>
-                  <th>Matrícula</th>
+                  <th>ID Registro</th>
                   <th>Departamento</th>
                   <th>Disciplinas</th>
                   <th>Ações</th>
@@ -192,31 +232,32 @@ export default function ListarProfessores() {
                   >
                     <td className="cell-nome">
                       <div className="professor-avatar">
-                        {prof.user?.nome.charAt(0).toUpperCase()}
+                        {prof.user?.nome?.charAt(0).toUpperCase() || "P"}
                       </div>
                       <div className="professor-info">
-                        <div className="professor-nome">{prof.user?.nome}</div>
-                        <div className="professor-id">{prof.matricula}</div>
+                        <div className="professor-nome">{prof.user?.nome || "Sem Nome"}</div>
+                        <div className="professor-id">User ID: {prof.user_id}</div>
                       </div>
                     </td>
                     <td className="cell-email">
-                      <a href={`mailto:${prof.user?.email}`}>{prof.user?.email}</a>
+                      <a href={`mailto:${prof.user?.email}`}>{prof.user?.email || "—"}</a>
                     </td>
                     <td className="cell-matricula">
-                      <span className="matricula-badge">{prof.matricula}</span>
+                      <span className="matricula-badge">Prof #{prof.id}</span>
                     </td>
                     <td className="cell-departamento">
                       <span className="badge badge-primary">
-                        {prof.departamento}
+                        {prof.departamento || "Geral"}
                       </span>
                     </td>
                     <td className="cell-disciplinas">
                       <div className="disciplinas-tags">
-                        {prof.disciplinas?.split(", ").map((disc, idx) => (
+                        {/* Divide strings separadas por vírgula se existirem ou exibe o campo singular */}
+                        {prof.disciplina?.split(", ").map((disc, idx) => (
                           <span key={idx} className="tag tag-small">
                             {disc}
                           </span>
-                        ))}
+                        )) || <span className="tag tag-small">—</span>}
                       </div>
                     </td>
                     <td className="cell-acoes">
@@ -238,7 +279,7 @@ export default function ListarProfessores() {
                         <button
                           className="btn-icon btn-icon-delete"
                           title="Deletar"
-                          onClick={() => deletarProfessor(prof.id, prof.user_id)}
+                          onClick={() => deletarProfessor(prof.id)}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -250,7 +291,7 @@ export default function ListarProfessores() {
             </table>
           </div>
 
-          {/* Painel Lateral de Detalhes */}
+          {/* Painel Lateral de Detalhes (Visualizar Detalhes) */}
           {professorSelecionado && (
             <div className="detalhes-sidebar">
               <div className="detalhes-header">
@@ -264,9 +305,8 @@ export default function ListarProfessores() {
               </div>
 
               <div className="detalhes-content">
-                {/* Avatar Grande */}
                 <div className="detalhes-avatar">
-                  {professorSelecionado.user?.nome.charAt(0).toUpperCase()}
+                  {professorSelecionado.user?.nome?.charAt(0).toUpperCase() || "P"}
                 </div>
 
                 {/* Informações Pessoais */}
@@ -297,8 +337,8 @@ export default function ListarProfessores() {
                 <div className="detalhes-section">
                   <h4>Informações Profissionais</h4>
                   <div className="detalhes-item">
-                    <span className="label">Matrícula</span>
-                    <span className="value">{professorSelecionado.matricula}</span>
+                    <span className="label">ID Professor</span>
+                    <span className="value">#{professorSelecionado.id}</span>
                   </div>
                   <div className="detalhes-item">
                     <span className="label">Departamento</span>
@@ -314,12 +354,12 @@ export default function ListarProfessores() {
                 <div className="detalhes-section">
                   <h4>Disciplinas</h4>
                   <div className="disciplinas-detalhes">
-                    {professorSelecionado.disciplinas?.split(", ").map((disc, idx) => (
+                    {professorSelecionado.disciplina?.split(", ").map((disc, idx) => (
                       <span key={idx} className="tag tag-medium">
                         <BookOpen size={12} />
                         {disc}
                       </span>
-                    ))}
+                    )) || "Nenhuma cadastrada"}
                   </div>
                 </div>
 
@@ -334,10 +374,7 @@ export default function ListarProfessores() {
                   </Link>
                   <button
                     className="btn btn-outline btn-block btn-danger"
-                    onClick={() => {
-                      deletarProfessor(professorSelecionado.id, professorSelecionado.user_id);
-                      setProfessorSelecionado(null);
-                    }}
+                    onClick={() => deletarProfessor(professorSelecionado.id)}
                   >
                     <Trash2 size={16} />
                     Deletar
@@ -356,12 +393,15 @@ export default function ListarProfessores() {
             <h3>Confirmar Eliminação</h3>
             <p>
               Tem certeza que deseja eliminar este professor? Esta ação não pode ser
-              desfeita.
+              desfeita e apagará o registro no servidor.
             </p>
             <div className="modal-actions">
               <button
                 className="btn btn-outline"
-                onClick={() => setShowConfirm(false)}
+                onClick={() => {
+                  setShowConfirm(false);
+                  setProfessorParaDeletar(null);
+                }}
               >
                 Cancelar
               </button>

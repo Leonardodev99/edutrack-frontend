@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   User,
   Mail,
@@ -11,23 +11,21 @@ import {
   EyeOff,
   KeyRound,
   BadgeCheck,
+  Loader,
 } from "lucide-react";
+import api from "../../services/api";
 import "../../styles/PerfilAdmin.css";
 
-const adminMock = {
-  nome: "Enoque Filipe",
-  email: "filipeenoque27@gmail.com",
-  senha: "123456",
-  tipo: "gestor",
-};
-
 export default function PerfilAdmin() {
-  const [admin, setAdmin] = useState(adminMock);
+  const [admin, setAdmin] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
 
   // Edição de informações
   const [editandoInfo, setEditandoInfo] = useState(false);
-  const [infoForm, setInfoForm] = useState({ nome: admin.nome, email: admin.email });
+  const [infoForm, setInfoForm] = useState({ nome: "", email: "" });
   const [errosInfo, setErrosInfo] = useState({});
+  const [salvandoInfo, setSalvandoInfo] = useState(false);
 
   // Alteração de senha
   const [editandoSenha, setEditandoSenha] = useState(false);
@@ -37,6 +35,7 @@ export default function PerfilAdmin() {
     confirmarSenha: "",
   });
   const [errosSenha, setErrosSenha] = useState({});
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
   const [mostrarSenhas, setMostrarSenhas] = useState({
     senhaAtual: false,
     novaSenha: false,
@@ -46,10 +45,40 @@ export default function PerfilAdmin() {
   const [sucessoInfo, setSucessoInfo] = useState(false);
   const [sucessoSenha, setSucessoSenha] = useState(false);
 
+  // Carregar perfil do usuário
+  useEffect(() => {
+    carregarPerfil();
+  }, []);
+
+  const carregarPerfil = async () => {
+    setCarregando(true);
+    setErro("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+
+      // GET /users/me - retorna o perfil do usuário logado
+      const response = await api.get("/users/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setAdmin(response.data);
+      setInfoForm({
+        nome: response.data.nome,
+        email: response.data.email,
+      });
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar perfil.";
+      setErro(msg);
+      console.error("Erro ao carregar perfil:", error);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
   // --- Validação Info ---
   function validarInfo() {
     const erros = {};
-    if (!infoForm.nome.trim()) erros.nome = "Nome é obrigatório";
+    if (!infoForm.nome.trim()) erros.nome = "Nome é obrigat��rio";
     if (!infoForm.email.trim()) erros.email = "Email é obrigatório";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(infoForm.email))
       erros.email = "Email inválido";
@@ -57,12 +86,35 @@ export default function PerfilAdmin() {
     return Object.keys(erros).length === 0;
   }
 
-  function salvarInfo() {
+  async function salvarInfo() {
     if (!validarInfo()) return;
-    setAdmin((prev) => ({ ...prev, nome: infoForm.nome, email: infoForm.email }));
-    setEditandoInfo(false);
-    setSucessoInfo(true);
-    setTimeout(() => setSucessoInfo(false), 3000);
+
+    setSalvandoInfo(true);
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+
+      // PUT /users/:id - atualiza informações do usuário
+      const response = await api.put(
+        `/users/${admin.id}`,
+        {
+          nome: infoForm.nome,
+          email: infoForm.email,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setAdmin(response.data);
+      setEditandoInfo(false);
+      setSucessoInfo(true);
+      setTimeout(() => setSucessoInfo(false), 3000);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao atualizar informações.";
+      alert(msg);
+    } finally {
+      setSalvandoInfo(false);
+    }
   }
 
   function cancelarInfo() {
@@ -75,23 +127,45 @@ export default function PerfilAdmin() {
   function validarSenha() {
     const erros = {};
     if (!senhaForm.senhaAtual) erros.senhaAtual = "Senha atual é obrigatória";
-    else if (senhaForm.senhaAtual !== admin.senha) erros.senhaAtual = "Senha atual incorreta";
     if (!senhaForm.novaSenha) erros.novaSenha = "Nova senha é obrigatória";
-    else if (senhaForm.novaSenha.length < 6) erros.novaSenha = "Mínimo de 6 caracteres";
-    if (!senhaForm.confirmarSenha) erros.confirmarSenha = "Confirme a nova senha";
+    else if (senhaForm.novaSenha.length < 6)
+      erros.novaSenha = "Mínimo de 6 caracteres";
+    if (!senhaForm.confirmarSenha)
+      erros.confirmarSenha = "Confirme a nova senha";
     else if (senhaForm.novaSenha !== senhaForm.confirmarSenha)
       erros.confirmarSenha = "As senhas não coincidem";
     setErrosSenha(erros);
     return Object.keys(erros).length === 0;
   }
 
-  function salvarSenha() {
+  async function salvarSenha() {
     if (!validarSenha()) return;
-    setAdmin((prev) => ({ ...prev, senha: senhaForm.novaSenha }));
-    setSenhaForm({ senhaAtual: "", novaSenha: "", confirmarSenha: "" });
-    setEditandoSenha(false);
-    setSucessoSenha(true);
-    setTimeout(() => setSucessoSenha(false), 3000);
+
+    setSalvandoSenha(true);
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+
+      // PUT /users/:id - atualiza a senha do usuário
+      await api.put(
+        `/users/${admin.id}`,
+        {
+          senha: senhaForm.novaSenha,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setSenhaForm({ senhaAtual: "", novaSenha: "", confirmarSenha: "" });
+      setEditandoSenha(false);
+      setSucessoSenha(true);
+      setTimeout(() => setSucessoSenha(false), 3000);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao alterar senha.";
+      alert(msg);
+    } finally {
+      setSalvandoSenha(false);
+    }
   }
 
   function cancelarSenha() {
@@ -102,6 +176,28 @@ export default function PerfilAdmin() {
 
   function toggleVerSenha(campo) {
     setMostrarSenhas((prev) => ({ ...prev, [campo]: !prev[campo] }));
+  }
+
+  if (carregando) {
+    return (
+      <div className="perfil-admin-page">
+        <div className="loading-state">
+          <Loader size={48} className="spinner" />
+          <p>A carregar perfil...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!admin) {
+    return (
+      <div className="perfil-admin-page">
+        <div className="page-header">
+          <h1 className="page-title">Meu Perfil</h1>
+        </div>
+        <div className="alert alert-danger">{erro || "Perfil não encontrado"}</div>
+      </div>
+    );
   }
 
   const iniciais = admin.nome
@@ -116,9 +212,13 @@ export default function PerfilAdmin() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Meu Perfil</h1>
-          <p className="page-subtitle">Gerencie as suas informações pessoais e segurança</p>
+          <p className="page-subtitle">
+            Gerencie as suas informações pessoais e segurança
+          </p>
         </div>
       </div>
+
+      {erro && <div className="alert alert-danger">{erro}</div>}
 
       <div className="perfil-layout">
         {/* Coluna esquerda — cartão de identidade */}
@@ -157,7 +257,11 @@ export default function PerfilAdmin() {
             </div>
             <div className="stat-row">
               <span className="stat-label">Estado</span>
-              <span className="badge-ativo">● Ativo</span>
+              <span
+                className={`badge-ativo ${admin.ativo ? "ativo" : "inativo"}`}
+              >
+                ● {admin.ativo ? "Ativo" : "Inativo"}
+              </span>
             </div>
           </div>
         </div>
@@ -188,7 +292,9 @@ export default function PerfilAdmin() {
             </div>
 
             {sucessoInfo && (
-              <div className="alert alert-success">✓ Informações atualizadas com sucesso!</div>
+              <div className="alert alert-success">
+                ✓ Informações atualizadas com sucesso!
+              </div>
             )}
 
             <div className="card-body">
@@ -250,9 +356,22 @@ export default function PerfilAdmin() {
                     <X size={15} />
                     Cancelar
                   </button>
-                  <button className="btn btn-hero" onClick={salvarInfo}>
-                    <Save size={15} />
-                    Guardar
+                  <button
+                    className="btn btn-hero"
+                    onClick={salvarInfo}
+                    disabled={salvandoInfo}
+                  >
+                    {salvandoInfo ? (
+                      <>
+                        <Loader size={15} className="spinner-small" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={15} />
+                        Guardar
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -283,7 +402,9 @@ export default function PerfilAdmin() {
             </div>
 
             {sucessoSenha && (
-              <div className="alert alert-success">✓ Palavra-passe alterada com sucesso!</div>
+              <div className="alert alert-success">
+                ✓ Palavra-passe alterada com sucesso!
+              </div>
             )}
 
             {editandoSenha ? (
@@ -297,10 +418,15 @@ export default function PerfilAdmin() {
                   <div className="input-password-wrap">
                     <input
                       type={mostrarSenhas.senhaAtual ? "text" : "password"}
-                      className={`input ${errosSenha.senhaAtual ? "is-invalid" : ""}`}
+                      className={`input ${
+                        errosSenha.senhaAtual ? "is-invalid" : ""
+                      }`}
                       value={senhaForm.senhaAtual}
                       onChange={(e) =>
-                        setSenhaForm({ ...senhaForm, senhaAtual: e.target.value })
+                        setSenhaForm({
+                          ...senhaForm,
+                          senhaAtual: e.target.value,
+                        })
                       }
                       placeholder="••••••••"
                     />
@@ -309,7 +435,11 @@ export default function PerfilAdmin() {
                       className="toggle-senha"
                       onClick={() => toggleVerSenha("senhaAtual")}
                     >
-                      {mostrarSenhas.senhaAtual ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {mostrarSenhas.senhaAtual ? (
+                        <EyeOff size={15} />
+                      ) : (
+                        <Eye size={15} />
+                      )}
                     </button>
                   </div>
                   {errosSenha.senhaAtual && (
@@ -326,7 +456,9 @@ export default function PerfilAdmin() {
                   <div className="input-password-wrap">
                     <input
                       type={mostrarSenhas.novaSenha ? "text" : "password"}
-                      className={`input ${errosSenha.novaSenha ? "is-invalid" : ""}`}
+                      className={`input ${
+                        errosSenha.novaSenha ? "is-invalid" : ""
+                      }`}
                       value={senhaForm.novaSenha}
                       onChange={(e) =>
                         setSenhaForm({ ...senhaForm, novaSenha: e.target.value })
@@ -338,7 +470,11 @@ export default function PerfilAdmin() {
                       className="toggle-senha"
                       onClick={() => toggleVerSenha("novaSenha")}
                     >
-                      {mostrarSenhas.novaSenha ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {mostrarSenhas.novaSenha ? (
+                        <EyeOff size={15} />
+                      ) : (
+                        <Eye size={15} />
+                      )}
                     </button>
                   </div>
                   {errosSenha.novaSenha && (
@@ -355,10 +491,15 @@ export default function PerfilAdmin() {
                   <div className="input-password-wrap">
                     <input
                       type={mostrarSenhas.confirmarSenha ? "text" : "password"}
-                      className={`input ${errosSenha.confirmarSenha ? "is-invalid" : ""}`}
+                      className={`input ${
+                        errosSenha.confirmarSenha ? "is-invalid" : ""
+                      }`}
                       value={senhaForm.confirmarSenha}
                       onChange={(e) =>
-                        setSenhaForm({ ...senhaForm, confirmarSenha: e.target.value })
+                        setSenhaForm({
+                          ...senhaForm,
+                          confirmarSenha: e.target.value,
+                        })
                       }
                       placeholder="Repita a nova senha"
                     />
@@ -367,11 +508,17 @@ export default function PerfilAdmin() {
                       className="toggle-senha"
                       onClick={() => toggleVerSenha("confirmarSenha")}
                     >
-                      {mostrarSenhas.confirmarSenha ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {mostrarSenhas.confirmarSenha ? (
+                        <EyeOff size={15} />
+                      ) : (
+                        <Eye size={15} />
+                      )}
                     </button>
                   </div>
                   {errosSenha.confirmarSenha && (
-                    <span className="error-msg">{errosSenha.confirmarSenha}</span>
+                    <span className="error-msg">
+                      {errosSenha.confirmarSenha}
+                    </span>
                   )}
                 </div>
 
@@ -380,9 +527,22 @@ export default function PerfilAdmin() {
                     <X size={15} />
                     Cancelar
                   </button>
-                  <button className="btn btn-hero" onClick={salvarSenha}>
-                    <Save size={15} />
-                    Guardar
+                  <button
+                    className="btn btn-hero"
+                    onClick={salvarSenha}
+                    disabled={salvandoSenha}
+                  >
+                    {salvandoSenha ? (
+                      <>
+                        <Loader size={15} className="spinner-small" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={15} />
+                        Guardar
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -391,7 +551,7 @@ export default function PerfilAdmin() {
                 <div className="senha-placeholder">
                   <Lock size={15} />
                   <span>••••••••••••</span>
-                  <span className="senha-hint">Última alteração desconhecida</span>
+                  <span className="senha-hint">Palavra-passe protegida</span>
                 </div>
               </div>
             )}

@@ -1,9 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Clock, Trash2, Edit, Calendar, BookOpen, User, School } from "lucide-react";
-import { horariosStore } from "../../utils/adminMockHorarios";
-import { turmasStore } from "../../utils/adminMockData.js";
-import { professoresStore, usersStore } from "../../utils/mockUsers.js";
+import { Plus, Search, Clock, Trash2, Edit, Calendar, BookOpen, User, School, Loader } from "lucide-react";
+import api from "../../services/api";
 import "../../styles/ListarHorarios.css";
 
 const DIAS_SEMANA = [
@@ -14,35 +12,89 @@ const DIAS_SEMANA = [
   "Sexta-feira",
 ];
 
+// 🔄 Tradutor do formato do Banco para o formato do Front-end
+const MAPA_BANCO_PARA_FRONT = {
+  "segunda": "Segunda-feira",
+  "terca": "Terça-feira",
+  "quarta": "Quarta-feira",
+  "quinta": "Quinta-feira",
+  "sexta": "Sexta-feira"
+};
+
 export default function ListarHorarios() {
   const navigate = useNavigate();
 
+  const [horarios, setHorarios] = useState([]);
   const [pesquisa, setPesquisa] = useState("");
   const [filtroDia, setFiltroDia] = useState("Todos");
   const [filtroTurma, setFiltroTurma] = useState("Todas");
   const [confirmDelete, setConfirmDelete] = useState(null);
+  
+  const [carregando, setCarregando] = useState(true);
+  const [erroGeral, setErroGeral] = useState("");
+  const [turmas, setTurmas] = useState([]);
 
-  const turmasDisponiveis = turmasStore.list();
-  const professoresDisponiveis = professoresStore.list().map((prof) => ({
-    ...prof,
-    user: usersStore.get(prof.user_id),
-  }));
+  async function carregarHorarios() {
+    setCarregando(true);
+    setErroGeral("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      const response = await api.get("/schedules", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Mapeia os horários normalizando o dia_semana vindo do back-end
+      const horariosNormalizados = response.data.map(h => ({
+        ...h,
+        // Se vier "segunda", vira "Segunda-feira". Se já vier correto, mantém.
+        dia_semana: MAPA_BANCO_PARA_FRONT[h.dia_semana] || h.dia_semana
+      }));
 
-  const horarios = horariosStore.list();
-
-  function obterNomeTurma(classId) {
-    return turmasStore.get(classId)?.nome || "—";
+      setHorarios(horariosNormalizados);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar lista de horários.";
+      setErroGeral(msg);
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  function obterNomeProfessor(teacherId) {
-    const prof = professoresDisponiveis.find((p) => p.id == teacherId);
-    return prof?.user?.nome || "—";
+  async function carregarTurmas() {
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      const response = await api.get("/classes", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setTurmas(response.data);
+    } catch (error) {
+      console.error("Erro ao carregar turmas:", error);
+    }
   }
 
+  useEffect(() => {
+    carregarHorarios();
+    carregarTurmas();
+  }, []);
+
+  // Filtrar horários
   const horariosFiltrados = useMemo(() => {
     return horarios.filter((h) => {
-      const nomeTurma = obterNomeTurma(h.class_id).toLowerCase();
-      const nomeProfessor = obterNomeProfessor(h.teacher_id).toLowerCase();
+      // Garante suporte tanto para "class" quanto para "Class" (vulnerabilidade comum do Sequelize)
+      const dadosTurma = h.class || h.Class;
+      const dadosProfessor = h.teacher || h.Teacher;
+
+      const nomeTurma = (dadosTurma?.nome || "").toLowerCase();
+      
+      // Procura o nome do usuário associado ao professor de forma segura nas duas capitalizações
+      const nomeProfessor = (
+        dadosProfessor?.User?.nome || 
+        dadosProfessor?.user?.nome || 
+        ""
+      ).toLowerCase();
+
       const disciplina = (h.disciplina || "").toLowerCase();
       const sala = (h.sala || "").toLowerCase();
       const termo = pesquisa.toLowerCase();
@@ -53,11 +105,10 @@ export default function ListarHorarios() {
         nomeProfessor.includes(termo) ||
         disciplina.includes(termo) ||
         sala.includes(termo) ||
-        (h.codigo || "").toLowerCase().includes(termo);
+        (h.id || "").toString().includes(termo);
 
       const matchDia = filtroDia === "Todos" || h.dia_semana === filtroDia;
-      const matchTurma =
-        filtroTurma === "Todas" || h.class_id == filtroTurma;
+      const matchTurma = filtroTurma === "Todas" || h.class_id == filtroTurma;
 
       return matchPesquisa && matchDia && matchTurma;
     });
@@ -76,9 +127,21 @@ export default function ListarHorarios() {
     }));
   }, [horariosFiltrados]);
 
-  function handleEliminar(id) {
-    horariosStore.delete(id);
-    setConfirmDelete(null);
+  async function handleEliminar(id) {
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      await api.delete(`/schedules/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setHorarios((prev) => prev.filter((h) => h.id !== id));
+      setConfirmDelete(null);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Apenas gestores podem eliminar horários.";
+      alert(msg);
+      setConfirmDelete(null);
+    }
   }
 
   const diasAbrev = {
@@ -88,6 +151,17 @@ export default function ListarHorarios() {
     "Quinta-feira": "QUI",
     "Sexta-feira": "SEX",
   };
+
+  if (carregando) {
+    return (
+      <div className="listar-horarios-page">
+        <div className="loading-state">
+          <Loader size={48} className="spinner" />
+          <p>A carregar horários do sistema...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="listar-horarios-page">
@@ -106,6 +180,8 @@ export default function ListarHorarios() {
           Novo Horário
         </button>
       </div>
+
+      {erroGeral && <div className="alert alert-danger">{erroGeral}</div>}
 
       {/* Filtros */}
       <div className="filtros-bar">
@@ -140,7 +216,7 @@ export default function ListarHorarios() {
             onChange={(e) => setFiltroTurma(e.target.value)}
           >
             <option value="Todas">Todas as turmas</option>
-            {turmasDisponiveis.map((t) => (
+            {turmas.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nome}
               </option>
@@ -196,56 +272,64 @@ export default function ListarHorarios() {
               </div>
 
               <div className="horarios-grid">
-                {lista.map((h) => (
-                  <div key={h.id} className="horario-card">
-                    <div className="horario-card-top">
-                      <span className="horario-codigo">{h.codigo}</span>
-                      <div className="horario-actions">
-                        <button
-                          className="icon-btn icon-btn-edit"
-                          title="Editar"
-                          onClick={() => navigate(`/admin/horarios/editar/${h.id}`)}
-                        >
-                          <Edit size={15} />
-                        </button>
-                        <button
-                          className="icon-btn icon-btn-delete"
-                          title="Eliminar"
-                          onClick={() => setConfirmDelete(h.id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                {lista.map((h) => {
+                  const tObj = h.class || h.Class;
+                  const pObj = h.teacher || h.Teacher;
+                  // Remove os segundos (:00) finais das horas para ficar visualmente limpo
+                  const inicioFormatado = h.hora_inicio?.slice(0, 5) || "—";
+                  const fimFormatado = h.hora_fim?.slice(0, 5) || "—";
+
+                  return (
+                    <div key={h.id} className="horario-card">
+                      <div className="horario-card-top">
+                        <span className="horario-codigo">ID #{h.id}</span>
+                        <div className="horario-actions">
+                          <button
+                            className="icon-btn icon-btn-edit"
+                            title="Editar"
+                            onClick={() => navigate(`/admin/horarios/editar/${h.id}`)}
+                          >
+                            <Edit size={15} />
+                          </button>
+                          <button
+                            className="icon-btn icon-btn-delete"
+                            title="Eliminar"
+                            onClick={() => setConfirmDelete(h.id)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="horario-disciplina">
+                        <BookOpen size={16} />
+                        <span>{h.disciplina || "—"}</span>
+                      </div>
+
+                      <div className="horario-time">
+                        <Clock size={14} />
+                        <span>
+                          {inicioFormatado} — {fimFormatado}
+                        </span>
+                      </div>
+
+                      <div className="horario-meta">
+                        <div className="meta-item">
+                          <School size={13} />
+                          <span>{tObj?.nome || "—"}</span>
+                        </div>
+                        <div className="meta-item">
+                          <User size={13} />
+                          <span>{pObj?.User?.nome || pObj?.user?.nome || `Prof. ID ${h.teacher_id}`}</span>
+                        </div>
+                      </div>
+
+                      <div className="horario-sala">
+                        Sala <strong>{h.sala || "—"}</strong>
                       </div>
                     </div>
-
-                    <div className="horario-disciplina">
-                      <BookOpen size={16} />
-                      <span>{h.disciplina}</span>
-                    </div>
-
-                    <div className="horario-time">
-                      <Clock size={14} />
-                      <span>
-                        {h.hora_inicio} — {h.hora_fim}
-                      </span>
-                    </div>
-
-                    <div className="horario-meta">
-                      <div className="meta-item">
-                        <School size={13} />
-                        <span>{obterNomeTurma(h.class_id)}</span>
-                      </div>
-                      <div className="meta-item">
-                        <User size={13} />
-                        <span>{obterNomeProfessor(h.teacher_id)}</span>
-                      </div>
-                    </div>
-
-                    <div className="horario-sala">
-                      Sala <strong>{h.sala}</strong>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

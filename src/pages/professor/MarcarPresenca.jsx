@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Calendar, Clock, UserCheck, AlertCircle } from "lucide-react";
-import { alunosStore } from "../../utils/adminMockData.js"; // Para listar os alunos da turma
+import api from "../../services/api"; 
 import "../../styles/MarcarPresenca.css";
 
 export default function MarcarPresenca() {
@@ -12,7 +12,7 @@ export default function MarcarPresenca() {
   const [aulaData, setAulaData] = useState({
     schedule_id: "",
     data_aula: new Date().toISOString().split("T")[0],
-    teacher_id: "p-1", // Simulação do professor logado
+    teacher_id: "", 
   });
 
   // Estado que guarda a presença de cada aluno [student_id]: { presente: bool, observacao: string }
@@ -20,18 +20,8 @@ export default function MarcarPresenca() {
   const [erros, setErros] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
-
-  // Mock estático de horários disponíveis vinculados a este professor para o Passo 1
-  const horariosDisponiveis = [
-    { id: "sch-501", turma: "Sub-14 A", disciplina: "Junior Game Development", hora: "09:00 - 10:30" },
-    { id: "sch-502", turma: "Sub-12 B", disciplina: "Digital Sciences", hora: "10:45 - 12:15" },
-  ];
-
-  // Listar alunos cadastrados para fazer a chamada no Passo 2
-  const alunosDaTurma = useMemo(() => {
-    if (typeof alunosStore?.list !== "function") return [];
-    return alunosStore.list();
-  }, []);
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState([]);
+  const [alunosDaTurma, setAlunosDaTurma] = useState([]);
 
   // Inicializar o estado da chamada quando avançar para a Etapa 2
   function inicializarListaChamada() {
@@ -57,13 +47,44 @@ export default function MarcarPresenca() {
     return Object.keys(novosErros).length === 0;
   }
 
-  function avancar() {
-    if (etapa === 1 && validarEtapa1()) {
-      inicializarListaChamada();
-      setEtapa(2);
-      setErros({});
-    }
+  async function avancar() {
+
+  if (!validarEtapa1()) return;
+
+  await carregarAlunosTurma(aulaData.schedule_id);
+
+  const token = localStorage.getItem("@EduTrack:token");
+
+  const response = await api.get("/schedules/me", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (response.data.length > 0) {
+    setAulaData((prev) => ({
+      ...prev,
+      teacher_id: response.data[0].teacher_id,
+    }));
   }
+
+  const estadoInicial = {};
+
+  response.data;
+
+  alunosDaTurma.forEach((aluno) => {
+    estadoInicial[aluno.id] = {
+      presente: true,
+      observacao: "",
+    };
+  });
+
+  setListaPresenca(estadoInicial);
+
+  setEtapa(2);
+
+  setErros({});
+}
 
   function voltar() {
     if (etapa > 1) {
@@ -87,39 +108,120 @@ export default function MarcarPresenca() {
     }));
   }
 
+  useEffect(() => {
+  carregarHorariosProfessor();
+  }, []);
+
+  async function carregarHorariosProfessor() {
+  try {
+    const token = localStorage.getItem("@EduTrack:token");
+
+    const response = await api.get("/schedules/me", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    setHorariosDisponiveis(
+      response.data.map((h) => ({
+        id: h.id,
+        turma: h.class.nome,
+        disciplina: h.disciplina,
+        hora: `${h.hora_inicio.slice(0, 5)} - ${h.hora_fim.slice(0, 5)}`
+      }))
+    );
+
+  } catch (error) {
+    setErros({
+      geral:
+        error.response?.data?.error ||
+        "Erro ao carregar horários."
+    });
+  }
+}
+
+async function carregarAlunosTurma(scheduleId) {
+  try {
+
+    const token = localStorage.getItem("@EduTrack:token");
+
+    const response = await api.get(
+      `/schedules/${scheduleId}/students`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const alunos = response.data.map((aluno) => ({
+      id: aluno.id,
+      nome: aluno.user.nome,
+    }));
+
+    setAlunosDaTurma(alunos);
+
+  } catch (error) {
+
+    setErros({
+      geral:
+        error.response?.data?.error ||
+        "Erro ao carregar alunos."
+    });
+
+  }
+}
+
+  // 🔥 INTEGRAÇÃO COM O BACKEND VIA AXIOS
   async function handleSubmit(e) {
     e.preventDefault();
     if (etapa !== 2) return;
 
     setCarregando(true);
+    setErros({});
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Estruturação final dos dados mapeando cada aluno conforme os requisitos
-      const registrosPresenca = Object.keys(listaPresenca).map((studentId) => ({
+      // 1. Mapeia a lista de chamada para o formato aceito pelo bulkCreate
+      const lista_presencas = Object.keys(listaPresenca).map((studentId) => ({
         student_id: studentId,
+        presente: listaPresenca[studentId].presente,
+        observacao: listaPresenca[studentId].observacao || null,
+      }));
+
+      // 2. Monta o payload conforme esperado pelo AttendanceController.js
+      const payload = {
         schedule_id: aulaData.schedule_id,
         teacher_id: aulaData.teacher_id,
         data_aula: aulaData.data_aula,
-        presente: listaPresenca[studentId].presente,
-        observacao: listaPresenca[studentId].observacao,
-      }));
+        lista_presencas,
+      };
 
-      console.log("Salvando Presenças no Banco:", registrosPresenca);
+      // 3. Recupera o token de autenticação guardado no login
+      const token = localStorage.getItem("@EduTrack:token"); 
 
+      // 4. Executa a requisição POST com o Axios
+      await api.post("/attendances/bulk", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`, // Passa pelo authMiddleware do Express
+        },
+      });
+
+      // Se chegou aqui, o status foi 2xx (Sucesso)
       setSucesso(true);
       setTimeout(() => {
         navigate("/professor");
       }, 1500);
+
     } catch (error) {
-      setErros({ geral: "Erro ao salvar o livro de presenças." });
+      // O Axios centraliza a resposta de erro do backend em error.response.data
+      const mensagemErro = error.response?.data?.error || "Erro ao salvar a lista de presenças.";
+      setErros({ geral: mensagemErro });
     } finally {
       setCarregando(false);
     }
   }
 
-  const horarioSelecionado = horariosDisponiveis.find(h => h.id === aulaData.schedule_id);
+  const horarioSelecionado = horariosDisponiveis.find((h) => h.id === aulaData.schedule_id);
 
   return (
     <div className="marcar-presenca-page">
@@ -137,7 +239,6 @@ export default function MarcarPresenca() {
 
       <div className="presenca-container">
         <form className="presenca-form" onSubmit={handleSubmit}>
-          
           {/* Indicador de Etapas */}
           <div className="etapas-indicator">
             <div className={`etapa ${etapa >= 1 ? "ativa" : ""}`}>
@@ -184,7 +285,7 @@ export default function MarcarPresenca() {
                     <label
                       key={horario.id}
                       className={`horario-card ${aulaData.schedule_id === horario.id ? "is-selected" : ""}`}
-                    >
+                    > 
                       <input
                         type="radio"
                         name="schedule_id"
@@ -254,14 +355,14 @@ export default function MarcarPresenca() {
                                   type="button"
                                   className={`btn-toggle-p presente ${statusAtual.presente ? "ativo" : ""}`}
                                   onClick={() => handlePresencaChange(aluno.id, true)}
-                                >
+                                > 
                                   <UserCheck size={14} /> Presente
                                 </button>
                                 <button
                                   type="button"
                                   className={`btn-toggle-p ausente ${!statusAtual.presente ? "ativo" : ""}`}
                                   onClick={() => handlePresencaChange(aluno.id, false)}
-                                >
+                                > 
                                   <AlertCircle size={14} /> Ausente
                                 </button>
                               </div>
@@ -292,7 +393,7 @@ export default function MarcarPresenca() {
               className="btn btn-outline"
               onClick={voltar}
               disabled={carregando}
-            >
+            > 
               {etapa === 1 ? "Cancelar" : "Voltar e Alterar Aula"}
             </button>
 
@@ -307,7 +408,6 @@ export default function MarcarPresenca() {
               </button>
             )}
           </div>
-
         </form>
       </div>
     </div>

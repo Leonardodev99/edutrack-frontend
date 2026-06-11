@@ -1,112 +1,114 @@
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Save, Search } from "lucide-react";
-import { turmasStore, alunosStore, matricularAluno } from "../../utils/adminMockData.js";
+import api from "../../services/api.js";
 import "../../styles/MatricularAluno.css";
 
 export default function MatricularAluno() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const turmaIdInicial = location.state?.turmaId || "";
 
   const [etapa, setEtapa] = useState(1); // 1: Selecionar Aluno, 2: Selecionar Turma, 3: Confirmar
 
-  // Dados da Matrícula
   const [matriculaData, setMatriculaData] = useState({
     student_id: "",
-    turma_id: "",
+    turma_id: turmaIdInicial,
   });
 
+  const [alunos, setAlunos] = useState([]);
+  const [turmas, setTurmas] = useState([]);
   const [busca, setBusca] = useState("");
   const [buscaTurma, setBuscaTurma] = useState("");
   const [erros, setErros] = useState({});
   const [carregando, setCarregando] = useState(false);
+  const [carregandoDados, setCarregandoDados] = useState(true);
   const [sucesso, setSucesso] = useState(false);
 
-  // Obter alunos disponíveis
+  // Buscar alunos e turmas da API ao montar
+  useEffect(() => {
+    async function carregarDados() {
+      setCarregandoDados(true);
+      try {
+        const [resAlunos, resTurmas] = await Promise.all([
+          api.get("/students"),
+          api.get("/classes"),
+        ]);
+        setAlunos(resAlunos.data);
+        setTurmas(resTurmas.data);
+
+        // Se veio turmaId inicial por state, pular para etapa 1 normalmente
+        // (turma já pré-selecionada)
+        if (turmaIdInicial) {
+          setMatriculaData((prev) => ({ ...prev, turma_id: turmaIdInicial }));
+        }
+      } catch (error) {
+        setErros({ geral: "Erro ao carregar dados. Tente recarregar a página." });
+      } finally {
+        setCarregandoDados(false);
+      }
+    }
+
+    carregarDados();
+  }, [turmaIdInicial]);
+
+  // Alunos filtrados pela busca
   const alunosDisponiveis = useMemo(() => {
-    return alunosStore.list().filter((aluno) => {
-      const matchBusca =
-        aluno.nome.toLowerCase().includes(busca.toLowerCase()) ||
-        aluno.id.toLowerCase().includes(busca.toLowerCase()) ||
-        aluno.email.toLowerCase().includes(busca.toLowerCase());
+    const termo = busca.toLowerCase();
+    return alunos.filter(
+      (aluno) =>
+        aluno.nome?.toLowerCase().includes(termo) ||
+        String(aluno.id).toLowerCase().includes(termo) ||
+        aluno.email?.toLowerCase().includes(termo)
+    );
+  }, [alunos, busca]);
 
-      return matchBusca;
-    });
-  }, [busca]);
-
-  // Obter turmas disponíveis
+  // Turmas filtradas pela busca
   const turmasDisponiveis = useMemo(() => {
-    return turmasStore.list().filter((turma) => {
-      const matchBusca =
-        turma.nome.toLowerCase().includes(buscaTurma.toLowerCase()) ||
-        turma.codigo.toLowerCase().includes(buscaTurma.toLowerCase());
+    const termo = buscaTurma.toLowerCase();
+    return turmas.filter(
+      (turma) =>
+        turma.nome?.toLowerCase().includes(termo) ||
+        turma.codigo?.toLowerCase().includes(termo)
+    );
+  }, [turmas, buscaTurma]);
 
-      return matchBusca;
-    });
-  }, [buscaTurma]);
-
-  // Obter aluno selecionado
   function obterAlunoSelecionado() {
-    return alunosStore.get(matriculaData.student_id) || null;
+    return alunos.find((a) => String(a.id) === String(matriculaData.student_id)) || null;
   }
 
-  // Obter turma selecionada
   function obterTurmaSelecionada() {
-    return turmasStore.get(matriculaData.turma_id) || null;
+    return turmas.find((t) => String(t.id) === String(matriculaData.turma_id)) || null;
   }
 
-  // Validar Etapa 1
   function validarEtapa1() {
     const novosErros = {};
-
     if (!matriculaData.student_id) {
       novosErros.student_id = "Selecione um aluno";
     }
-
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
 
-  // Validar Etapa 2
   function validarEtapa2() {
     const novosErros = {};
-
     if (!matriculaData.turma_id) {
       novosErros.turma_id = "Selecione uma turma";
     }
-
-    const aluno = obterAlunoSelecionado();
-    const turma = obterTurmaSelecionada();
-
-    // Verifica se aluno já está em uma turma
-    if (aluno?.turmaId) {
-      novosErros.aluno_turma = `Este aluno já está matriculado na turma ${aluno.turmaId}`;
-    }
-
-    // Verifica se aluno já está nesta turma
-    if (turma?.alunos.includes(matriculaData.student_id)) {
-      novosErros.aluno_existe = "Este aluno já está matriculado nesta turma";
-    }
-
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar etapa
   function avancar() {
-    if (etapa === 1) {
-      if (validarEtapa1()) {
-        setEtapa(2);
-        setErros({});
-      }
-    } else if (etapa === 2) {
-      if (validarEtapa2()) {
-        setEtapa(3);
-        setErros({});
-      }
+    if (etapa === 1 && validarEtapa1()) {
+      setEtapa(2);
+      setErros({});
+    } else if (etapa === 2 && validarEtapa2()) {
+      setEtapa(3);
+      setErros({});
     }
   }
 
-  // Voltar etapa
   function voltar() {
     if (etapa > 1) {
       setEtapa(etapa - 1);
@@ -116,50 +118,50 @@ export default function MatricularAluno() {
     }
   }
 
-  // Submeter matrícula
   async function handleSubmit(e) {
     e.preventDefault();
-
-    if (etapa !== 3) {
-      return;
-    }
+    if (etapa !== 3) return;
 
     setCarregando(true);
+    setErros({});
 
     try {
-      // Simula delay de API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await api.post(`/classes/${matriculaData.turma_id}/enroll`, {
+        student_id: matriculaData.student_id,
+      });
 
-      // Realiza a matrícula
-      const resultado = matricularAluno(
-        matriculaData.turma_id,
-        matriculaData.student_id
-      );
-
-      if (resultado) {
-        setSucesso(true);
-        setTimeout(() => {
-          navigate("/admin/turmas");
-        }, 1500);
-      } else {
-        setErros({ geral: "Erro ao matricular aluno. Tente novamente." });
-      }
+      setSucesso(true);
+      setTimeout(() => {
+        navigate("/admin/turmas");
+      }, 1500);
     } catch (error) {
-      setErros({ geral: "Erro ao matricular aluno. Tente novamente." });
+      const mensagem =
+        error.response?.data?.error || "Erro ao matricular aluno. Tente novamente.";
+      setErros({ geral: mensagem });
     } finally {
       setCarregando(false);
     }
   }
 
-  // Calcular quantidade de alunos na turma selecionada
   function calcularLotacao() {
     const turma = obterTurmaSelecionada();
-    const quantidade = turma?.alunos?.length || 0;
-    const percentual = Math.round((quantidade / 30) * 100); // Supondo 30 lugares max
+    // A API pode retornar `students_count` ou um array `alunos`
+    const quantidade = turma?.students_count ?? turma?.alunos?.length ?? 0;
+    const percentual = Math.round((quantidade / 30) * 100);
     return { quantidade, percentual };
   }
 
   const { quantidade: quantidadeAlunos, percentual } = calcularLotacao();
+
+  if (carregandoDados) {
+    return (
+      <div className="matricular-aluno-page">
+        <div className="loading-state">
+          <p>Carregando dados...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="matricular-aluno-page">
@@ -199,14 +201,12 @@ export default function MatricularAluno() {
             </div>
           </div>
 
-          {/* Mensagem de Erro Geral */}
+          {/* Erro Geral */}
           {erros.geral && (
-            <div className="alert alert-danger">
-              {erros.geral}
-            </div>
+            <div className="alert alert-danger">{erros.geral}</div>
           )}
 
-          {/* Mensagem de Sucesso */}
+          {/* Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
               ✓ Aluno matriculado com sucesso! Redirecionando...
@@ -218,9 +218,7 @@ export default function MatricularAluno() {
             <>
               <div className="form-section">
                 <h2>Selecione o Aluno</h2>
-                <p className="section-desc">
-                  Escolha o aluno que deseja matricular
-                </p>
+                <p className="section-desc">Escolha o aluno que deseja matricular</p>
               </div>
 
               <div className="busca-container">
@@ -244,32 +242,36 @@ export default function MatricularAluno() {
                     <label
                       key={aluno.id}
                       className={`aluno-card ${
-                        matriculaData.student_id === aluno.id ? "is-selected" : ""
-                      } ${aluno.turmaId ? "is-disabled" : ""}`}
+                        String(matriculaData.student_id) === String(aluno.id)
+                          ? "is-selected"
+                          : ""
+                      } ${aluno.class_id ? "is-disabled" : ""}`}
                     >
                       <input
                         type="radio"
                         name="student_id"
                         value={aluno.id}
-                        checked={matriculaData.student_id === aluno.id}
+                        checked={
+                          String(matriculaData.student_id) === String(aluno.id)
+                        }
                         onChange={(e) =>
                           setMatriculaData({
                             ...matriculaData,
                             student_id: e.target.value,
                           })
                         }
-                        disabled={!!aluno.turmaId}
+                        disabled={!!aluno.class_id}
                       />
                       <div className="aluno-card-content">
                         <div className="aluno-avatar">
-                          {aluno.nome.charAt(0).toUpperCase()}
+                          {aluno.nome?.charAt(0).toUpperCase()}
                         </div>
                         <div className="aluno-dados">
                           <div className="aluno-nome">{aluno.nome}</div>
                           <div className="aluno-email">{aluno.email}</div>
-                          <div className="aluno-id">{aluno.id}</div>
+                          <div className="aluno-id">ID: {aluno.id}</div>
                         </div>
-                        {aluno.turmaId && (
+                        {aluno.class_id && (
                           <div className="status-badge">Já matriculado</div>
                         )}
                       </div>
@@ -298,7 +300,7 @@ export default function MatricularAluno() {
                 <strong>Aluno Selecionado:</strong>
                 <div className="aluno-info">
                   <div className="aluno-avatar-small">
-                    {obterAlunoSelecionado()?.nome.charAt(0).toUpperCase()}
+                    {obterAlunoSelecionado()?.nome?.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div className="aluno-nome">
@@ -332,14 +334,18 @@ export default function MatricularAluno() {
                     <label
                       key={turma.id}
                       className={`turma-card ${
-                        matriculaData.turma_id === turma.id ? "is-selected" : ""
+                        String(matriculaData.turma_id) === String(turma.id)
+                          ? "is-selected"
+                          : ""
                       }`}
                     >
                       <input
                         type="radio"
                         name="turma_id"
                         value={turma.id}
-                        checked={matriculaData.turma_id === turma.id}
+                        checked={
+                          String(matriculaData.turma_id) === String(turma.id)
+                        }
                         onChange={(e) =>
                           setMatriculaData({
                             ...matriculaData,
@@ -349,7 +355,7 @@ export default function MatricularAluno() {
                       />
                       <div className="turma-card-content">
                         <div className="turma-avatar">
-                          {turma.nome.charAt(0).toUpperCase()}
+                          {turma.nome?.charAt(0).toUpperCase()}
                         </div>
                         <div className="turma-dados">
                           <div className="turma-nome">{turma.nome}</div>
@@ -359,7 +365,9 @@ export default function MatricularAluno() {
                         <div className="turma-stats">
                           <div className="stat">
                             <span className="label">Alunos</span>
-                            <span className="value">{turma.alunos?.length || 0}</span>
+                            <span className="value">
+                              {turma.students_count ?? turma.alunos?.length ?? 0}
+                            </span>
                           </div>
                           <div className="stat">
                             <span className="label">Ano</span>
@@ -372,10 +380,8 @@ export default function MatricularAluno() {
                 </div>
               )}
 
-              {(erros.turma_id || erros.aluno_turma || erros.aluno_existe) && (
-                <span className="error-msg">
-                  {erros.turma_id || erros.aluno_turma || erros.aluno_existe}
-                </span>
+              {erros.turma_id && (
+                <span className="error-msg">{erros.turma_id}</span>
               )}
             </>
           )}
@@ -385,9 +391,7 @@ export default function MatricularAluno() {
             <>
               <div className="form-section">
                 <h2>Confirme a Matrícula</h2>
-                <p className="section-desc">
-                  Revise os dados antes de confirmar
-                </p>
+                <p className="section-desc">Revise os dados antes de confirmar</p>
               </div>
 
               <div className="confirmacao-container">
@@ -396,12 +400,12 @@ export default function MatricularAluno() {
                   <h3>Aluno</h3>
                   <div className="confirmacao-item">
                     <div className="item-avatar">
-                      {obterAlunoSelecionado()?.nome.charAt(0).toUpperCase()}
+                      {obterAlunoSelecionado()?.nome?.charAt(0).toUpperCase()}
                     </div>
                     <div className="item-info">
                       <div className="nome">{obterAlunoSelecionado()?.nome}</div>
                       <div className="email">{obterAlunoSelecionado()?.email}</div>
-                      <div className="id">{obterAlunoSelecionado()?.id}</div>
+                      <div className="id">ID: {obterAlunoSelecionado()?.id}</div>
                     </div>
                   </div>
                 </div>
@@ -411,7 +415,7 @@ export default function MatricularAluno() {
                   <h3>Turma</h3>
                   <div className="confirmacao-item">
                     <div className="item-avatar">
-                      {obterTurmaSelecionada()?.nome.charAt(0).toUpperCase()}
+                      {obterTurmaSelecionada()?.nome?.charAt(0).toUpperCase()}
                     </div>
                     <div className="item-info">
                       <div className="nome">{obterTurmaSelecionada()?.nome}</div>
@@ -441,7 +445,6 @@ export default function MatricularAluno() {
                     </div>
                   </div>
 
-                  {/* Barra de Lotação */}
                   <div className="lotacao-bar">
                     <div
                       className={`lotacao-fill ${
@@ -458,9 +461,9 @@ export default function MatricularAluno() {
               </div>
 
               <div className="alert alert-info">
-                <strong>ℹ Informação:</strong>
-                Após confirmar, o aluno será matriculado nesta turma e será
-                removido de qualquer outra turma anterior.
+                <strong>ℹ Informação:</strong> Após confirmar, o aluno será
+                matriculado nesta turma e não poderá ser matriculado em outra
+                enquanto estiver ativo.
               </div>
             </>
           )}
@@ -489,7 +492,7 @@ export default function MatricularAluno() {
               <button
                 type="submit"
                 className="btn btn-hero"
-                disabled={carregando}
+                disabled={carregando || sucesso}
               >
                 <Save size={18} />
                 {carregando ? "Matriculando..." : "Confirmar Matrícula"}

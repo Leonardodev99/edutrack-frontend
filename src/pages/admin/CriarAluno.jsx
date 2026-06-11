@@ -1,14 +1,19 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
-import { criarAluno, gerarMatricula, verificarEmailExistente } from "../../utils/mockUsers";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import api from "../../services/api.js";
 import "../../styles/CriarAluno.css";
+
+// Função utilitária local para gerar a matrícula temporária/inicial se necessário
+function gerarMatricula() {
+  return `ALU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+}
 
 export default function CriarAluno() {
   const navigate = useNavigate();
   const [etapa, setEtapa] = useState(1); // 1: Usuário, 2: Perfil Aluno
 
-  // Dados do Usuário
+  // Dados do Utilizador (Fase 1)
   const [userData, setUserData] = useState({
     nome: "",
     email: "",
@@ -16,7 +21,7 @@ export default function CriarAluno() {
     confirmarSenha: "",
   });
 
-  // Dados do Aluno
+  // Dados do Aluno (Fase 2)
   const [alunoData, setAlunoData] = useState({
     matricula: gerarMatricula(),
     curso: "Ensino Secundário",
@@ -27,22 +32,23 @@ export default function CriarAluno() {
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
-  // Validação da Etapa 1 (Usuário)
+  // ID do utilizador retornado após salvar a Etapa 1
+  const [createdUserId, setCreatedUserId] = useState(null);
+
+  // Validação Local da Etapa 1
   function validarEtapa1() {
     const novosErros = {};
 
     if (!userData.nome.trim()) {
       novosErros.nome = "Nome é obrigatório";
-    } else if (userData.nome.trim().length < 3) {
-      novosErros.nome = "Nome deve ter pelo menos 3 caracteres";
+    } else if (userData.nome.trim().length < 5) {
+      novosErros.nome = "O nome deve ter entre 5 e 150 caracteres (Regra API)";
     }
 
     if (!userData.email.trim()) {
       novosErros.email = "Email é obrigatório";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
       novosErros.email = "Email inválido";
-    } else if (verificarEmailExistente(userData.email)) {
-      novosErros.email = "Este email já está registado";
     }
 
     if (!userData.senha) {
@@ -52,14 +58,14 @@ export default function CriarAluno() {
     }
 
     if (userData.senha !== userData.confirmarSenha) {
-      novosErros.confirmarSenha = "Senhas não correspondem";
+      novosErros.confirmarSenha = "As senhas não correspondem";
     }
 
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
 
-  // Validação da Etapa 2 (Aluno)
+  // Validação Local da Etapa 2
   function validarEtapa2() {
     const novosErros = {};
 
@@ -79,55 +85,76 @@ export default function CriarAluno() {
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar para próxima etapa
-  function avancar() {
-    if (etapa === 1) {
-      if (validarEtapa1()) {
-        setEtapa(2);
+  // Avançar para a Etapa 2 realizando o primeiro insert na BD (/users)
+  async function avancar() {
+    if (!validarEtapa1()) return;
+
+    setCarregando(true);
+    setErros({});
+
+    try {
+      const response = await api.post("/users", {
+        nome: userData.nome,
+        email: userData.email,
+        senha: userData.senha,
+        tipo: "aluno", // Forçamos o tipo para aluno nesta tela
+      });
+
+      // Guardamos o ID do utilizador recém-criado
+      setCreatedUserId(response.data.id);
+      setEtapa(2);
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data.error) {
+        setErros({ email: error.response.data.error });
+      } else {
+        setErros({ geral: "Erro ao validar utilizador no servidor." });
       }
+    } finally {
+      setCarregando(false);
     }
   }
 
-  // Voltar para etapa anterior
   function voltar() {
     if (etapa === 2) {
       setEtapa(1);
     } else {
-      navigate("/admin");
+      navigate("/admin/alunos");
     }
   }
 
-  // Submeter formulário
+  // Submissão Final (Etapa 2)
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (etapa === 1) {
-      avancar();
+      await avancar();
       return;
     }
 
-    if (!validarEtapa2()) {
-      return;
-    }
+    if (!validarEtapa2()) return;
 
     setCarregando(true);
+    setErros({});
 
     try {
-      // Simula delay de API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Enviamos os dados para a tabela de alunos associando o user_id obtido na etapa 1
+      await api.post("/students", {
+        user_id: createdUserId,
+        matricula: alunoData.matricula,
+        curso: alunoData.curso,
+        ano_ingresso: alunoData.ano_ingresso,
+      });
 
-      const resultado = criarAluno(userData, alunoData);
-
-      if (resultado.sucesso) {
-        setSucesso(true);
-        setTimeout(() => {
-          navigate("/admin/alunos");
-        }, 1500);
-      } else {
-        setErros({ geral: resultado.erro });
-      }
+      setSucesso(true);
+      setTimeout(() => {
+        navigate("/admin/alunos");
+      }, 2000);
     } catch (error) {
-      setErros({ geral: "Erro ao criar aluno. Tente novamente." });
+      if (error.response && error.response.data && error.response.data.error) {
+        setErros({ geral: error.response.data.error });
+      } else {
+        setErros({ geral: "Erro ao vincular dados académicos do aluno." });
+      }
     } finally {
       setCarregando(false);
     }
@@ -136,7 +163,7 @@ export default function CriarAluno() {
   return (
     <div className="criar-aluno-page">
       <div className="page-header">
-        <button className="btn-back" onClick={voltar}>
+        <button type="button" className="btn-back" onClick={voltar}>
           <ArrowLeft size={20} />
         </button>
         <div>
@@ -151,6 +178,7 @@ export default function CriarAluno() {
 
       <div className="criar-aluno-container">
         <form className="criar-aluno-form" onSubmit={handleSubmit}>
+          
           {/* Indicador de Etapas */}
           <div className="etapas-indicator">
             <div className={`etapa ${etapa >= 1 ? "ativa" : ""}`}>
@@ -164,28 +192,22 @@ export default function CriarAluno() {
             </div>
           </div>
 
-          {/* Mensagem de Erro Geral */}
-          {erros.geral && (
-            <div className="alert alert-danger">
-              {erros.geral}
-            </div>
-          )}
+          {/* Erros Gerais */}
+          {erros.geral && <div className="alert alert-danger">{erros.geral}</div>}
 
-          {/* Mensagem de Sucesso */}
+          {/* Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
-              ✓ Aluno criado com sucesso! Redirecionando...
+              ✓ Aluno registado com sucesso na Base de Dados! Redirecionando...
             </div>
           )}
 
-          {/* ETAPA 1: DADOS DO USUÁRIO */}
+          {/* ETAPA 1: DADOS DE ACESSO */}
           {etapa === 1 && (
             <>
               <div className="form-section">
                 <h2>Dados de Acesso</h2>
-                <p className="section-desc">
-                  Crie uma conta para o novo aluno
-                </p>
+                <p className="section-desc">Crie a conta base para o sistema de autenticação</p>
               </div>
 
               <div className="form-group">
@@ -196,6 +218,7 @@ export default function CriarAluno() {
                   placeholder="João Pedro Silva"
                   value={userData.nome}
                   onChange={(e) => setUserData({ ...userData, nome: e.target.value })}
+                  disabled={carregando}
                 />
                 {erros.nome && <span className="error-msg">{erros.nome}</span>}
               </div>
@@ -208,6 +231,7 @@ export default function CriarAluno() {
                   placeholder="joao.silva@edutrack.pt"
                   value={userData.email}
                   onChange={(e) => setUserData({ ...userData, email: e.target.value })}
+                  disabled={carregando}
                 />
                 {erros.email && <span className="error-msg">{erros.email}</span>}
               </div>
@@ -221,6 +245,7 @@ export default function CriarAluno() {
                     placeholder="••••••••"
                     value={userData.senha}
                     onChange={(e) => setUserData({ ...userData, senha: e.target.value })}
+                    disabled={carregando}
                   />
                   {erros.senha && <span className="error-msg">{erros.senha}</span>}
                 </div>
@@ -232,37 +257,31 @@ export default function CriarAluno() {
                     className={`input ${erros.confirmarSenha ? "is-invalid" : ""}`}
                     placeholder="••••••••"
                     value={userData.confirmarSenha}
-                    onChange={(e) =>
-                      setUserData({ ...userData, confirmarSenha: e.target.value })
-                    }
+                    onChange={(e) => setUserData({ ...userData, confirmarSenha: e.target.value })}
+                    disabled={carregando}
                   />
-                  {erros.confirmarSenha && (
-                    <span className="error-msg">{erros.confirmarSenha}</span>
-                  )}
+                  {erros.confirmarSenha && <span className="error-msg">{erros.confirmarSenha}</span>}
                 </div>
               </div>
             </>
           )}
 
-          {/* ETAPA 2: DADOS DO ALUNO */}
+          {/* ETAPA 2: DADOS ACADÉMICOS */}
           {etapa === 2 && (
             <>
               <div className="form-section">
                 <h2>Dados Académicos</h2>
-                <p className="section-desc">
-                  Associe os dados académicos ao novo aluno
-                </p>
+                <p className="section-desc">Associe as informações escolares do Aluno</p>
               </div>
 
               <div className="form-group">
-                <label className="label">Email (Leitura) *</label>
+                <label className="label">Utilizador Vinculado (Apenas Leitura)</label>
                 <input
-                  type="email"
+                  type="text"
                   className="input is-disabled"
-                  value={userData.email}
+                  value={`${userData.nome} (${userData.email})`}
                   disabled
                 />
-                <span className="input-hint">Email do usuário criado</span>
               </div>
 
               <div className="form-group">
@@ -270,37 +289,27 @@ export default function CriarAluno() {
                 <input
                   type="text"
                   className={`input ${erros.matricula ? "is-invalid" : ""}`}
-                  placeholder="ALU-2024-001"
+                  placeholder="ALU-2026-001"
                   value={alunoData.matricula}
-                  onChange={(e) =>
-                    setAlunoData({ ...alunoData, matricula: e.target.value })
-                  }
+                  onChange={(e) => setAlunoData({ ...alunoData, matricula: e.target.value })}
+                  disabled={carregando}
                 />
-                {erros.matricula && (
-                  <span className="error-msg">{erros.matricula}</span>
-                )}
-                <span className="input-hint">
-                  Número único do aluno no sistema
-                </span>
+                {erros.matricula && <span className="error-msg">{erros.matricula}</span>}
               </div>
 
               <div className="form-row">
                 <div className="form-group">
                   <label className="label">Curso *</label>
                   <select
-                    className={`input ${erros.curso ? "is-invalid" : ""}`}
+                    className="input"
                     value={alunoData.curso}
-                    onChange={(e) =>
-                      setAlunoData({ ...alunoData, curso: e.target.value })
-                    }
+                    onChange={(e) => setAlunoData({ ...alunoData, curso: e.target.value })}
+                    disabled={carregando}
                   >
                     <option value="Ensino Básico">Ensino Básico</option>
                     <option value="Ensino Secundário">Ensino Secundário</option>
                     <option value="Cursos Profissionais">Cursos Profissionais</option>
                   </select>
-                  {erros.curso && (
-                    <span className="error-msg">{erros.curso}</span>
-                  )}
                 </div>
 
                 <div className="form-group">
@@ -308,24 +317,17 @@ export default function CriarAluno() {
                   <input
                     type="number"
                     className={`input ${erros.ano_ingresso ? "is-invalid" : ""}`}
-                    placeholder="2024"
                     value={alunoData.ano_ingresso}
-                    onChange={(e) =>
-                      setAlunoData({
-                        ...alunoData,
-                        ano_ingresso: parseInt(e.target.value),
-                      })
-                    }
+                    onChange={(e) => setAlunoData({ ...alunoData, ano_ingresso: parseInt(e.target.value) || "" })}
+                    disabled={carregando}
                   />
-                  {erros.ano_ingresso && (
-                    <span className="error-msg">{erros.ano_ingresso}</span>
-                  )}
+                  {erros.ano_ingresso && <span className="error-msg">{erros.ano_ingresso}</span>}
                 </div>
               </div>
             </>
           )}
 
-          {/* Botões de Ação */}
+          {/* Botões de Controlo */}
           <div className="form-actions">
             <button
               type="button"
@@ -333,7 +335,7 @@ export default function CriarAluno() {
               onClick={voltar}
               disabled={carregando}
             >
-              Cancelar
+              {etapa === 2 ? "Voltar" : "Cancelar"}
             </button>
 
             {etapa === 1 ? (
@@ -343,7 +345,13 @@ export default function CriarAluno() {
                 onClick={avancar}
                 disabled={carregando}
               >
-                Continuar
+                {carregando ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Loader2 size={16} className="animate-spin" /> Processando...
+                  </span>
+                ) : (
+                  "Avançar Passo"
+                )}
               </button>
             ) : (
               <button
@@ -351,17 +359,25 @@ export default function CriarAluno() {
                 className="btn btn-hero"
                 disabled={carregando}
               >
-                <Save size={18} />
-                {carregando ? "Criando..." : "Criar Aluno"}
+                {carregando ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Loader2 size={16} className="animate-spin" /> Salvando...
+                  </span>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    <span>Concluir Cadastro</span>
+                  </>
+                )}
               </button>
             )}
           </div>
         </form>
 
-        {/* Card de Resumo */}
+        {/* Painel lateral de Resumo */}
         {etapa === 2 && (
           <div className="form-resumo">
-            <h3>Resumo</h3>
+            <h3>Resumo do Registo</h3>
             <div className="resumo-item">
               <span className="resumo-label">Nome:</span>
               <span className="resumo-value">{userData.nome}</span>

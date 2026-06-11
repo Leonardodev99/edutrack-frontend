@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Plus,
@@ -11,13 +11,13 @@ import {
   Users,
   BookOpen,
   Calendar,
+  UserPlus, // Adicionado o ícone para Matricular/Adicionar Aluno
 } from "lucide-react";
-import { turmasStore, nomeProfessor, alunosStore } from "../../utils/adminMockData.js";
-import { professoresStore, usersStore } from "../../utils/mockUsers.js";
+import api from "../../services/api";
 import "../../styles/ListarTurmas.css";
 
 export default function ListarTurmas() {
-  const [turmas, setTurmas] = useState(turmasStore.list());
+  const [turmas, setTurmas] = useState([]);
   const [busca, setBusca] = useState("");
   const [filtroCurso, setFiltroCurso] = useState("todos");
   const [filtroAnoLetivo, setFiltroAnoLetivo] = useState("todos");
@@ -25,6 +25,10 @@ export default function ListarTurmas() {
   const [turmaSelecionada, setTurmaSelecionada] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [turmaParaDeletar, setTurmaParaDeletar] = useState(null);
+  
+  // Estados de carregamento e feedback
+  const [carregando, setCarregando] = useState(true);
+  const [erroGeral, setErroGeral] = useState("");
 
   const cursosDisponiveis = [
     "Ensino Básico",
@@ -32,35 +36,50 @@ export default function ListarTurmas() {
     "Cursos Profissionais",
   ];
 
-  // Obter professor da turma
-  function obterProfessor(teacherId) {
-    const prof = professoresStore.list().find((p) => p.id === teacherId);
-    if (!prof) return null;
-    const user = usersStore.get(prof.user_id);
-    return { ...prof, user };
+  // Função para buscar dados da API
+  async function carregarTurmas() {
+    setCarregando(true);
+    setErroGeral("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      // GET /classes - retorna todas as turmas com include de teacher e students
+      const response = await api.get("/classes", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      console.log("Dados que vieram do Backend:", response.data);
+      
+      setTurmas(response.data);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar lista de turmas.";
+      setErroGeral(msg);
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  // Obter dados do aluno
-  function obterAluno(alunoId) {
-    return alunosStore.get(alunoId) || null;
-  }
+  // Carrega ao montar a tela
+  useEffect(() => {
+    carregarTurmas();
+  }, []);
 
   // Obter anos letivos únicos
   const anosLetivosUnicos = useMemo(() => {
-    return [...new Set(turmasStore.list().map((t) => t.ano_letivo))].sort().reverse();
-  }, []);
+    return [...new Set(turmas.map((t) => t.ano_letivo))].sort().reverse();
+  }, [turmas]);
 
-  // Filtrar e ordenar turmas
+  // Filtrar e ordenar turmas de forma reativa usando useMemo
   const turmasFiltradas = useMemo(() => {
     let resultado = [...turmas];
 
     // Filtro de busca
     if (busca) {
+      const buscaLower = busca.toLowerCase();
       resultado = resultado.filter(
         (t) =>
-          t.nome.toLowerCase().includes(busca.toLowerCase()) ||
-          t.codigo.toLowerCase().includes(busca.toLowerCase()) ||
-          t.sala?.toLowerCase().includes(busca.toLowerCase())
+          t.nome?.toLowerCase().includes(buscaLower) ||
+          t.id?.toString().includes(buscaLower)
       );
     }
 
@@ -78,13 +97,13 @@ export default function ListarTurmas() {
     resultado.sort((a, b) => {
       switch (ordenacao) {
         case "nome":
-          return a.nome.localeCompare(b.nome);
+          return (a.nome || "").localeCompare(b.nome || "");
         case "alunos":
-          return (b.alunos?.length || 0) - (a.alunos?.length || 0);
+          return (b.students?.length || 0) - (a.students?.length || 0);
         case "ano-letivo":
-          return b.ano_letivo.localeCompare(a.ano_letivo);
+          return (b.ano_letivo || "").localeCompare(a.ano_letivo || "");
         case "curso":
-          return a.curso.localeCompare(b.curso);
+          return (a.curso || "").localeCompare(b.curso || "");
         default:
           return 0;
       }
@@ -93,19 +112,33 @@ export default function ListarTurmas() {
     return resultado;
   }, [turmas, busca, filtroCurso, filtroAnoLetivo, ordenacao]);
 
-  // Deletar turma
+  // Disparar fluxo de exclusão
   function deletarTurma(id) {
     setTurmaParaDeletar(id);
     setShowConfirm(true);
   }
 
-  function confirmarDelete() {
-    if (turmaParaDeletar) {
-      turmasStore.remove(turmaParaDeletar);
-      setTurmas(turmasStore.list());
+  // Confirmar exclusão no Back-end (Apenas Gestor pode remover)
+  async function confirmarDelete() {
+    if (!turmaParaDeletar) return;
+
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      // Chama a rota DELETE /classes/:id
+      await api.delete(`/classes/${turmaParaDeletar}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Atualiza o estado removendo localmente
+      setTurmas((prev) => prev.filter((t) => t.id !== turmaParaDeletar));
       setShowConfirm(false);
       setTurmaParaDeletar(null);
       setTurmaSelecionada(null);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Apenas gestores podem eliminar turmas.";
+      alert(msg);
+      setShowConfirm(false);
     }
   }
 
@@ -113,15 +146,23 @@ export default function ListarTurmas() {
   function calcularEstatisticas() {
     const totalTurmas = turmasFiltradas.length;
     const totalAlunos = turmasFiltradas.reduce(
-      (acc, t) => acc + (t.alunos?.length || 0),
+      (acc, t) => acc + (t.students?.length || 0),
       0
     );
-    const turmaCheia = turmasFiltradas.filter((t) => (t.alunos?.length || 0) >= 25).length;
+    const turmaCheia = turmasFiltradas.filter((t) => (t.students?.length || 0) >= 25).length;
 
     return { totalTurmas, totalAlunos, turmaCheia };
   }
 
   const { totalTurmas, totalAlunos, turmaCheia } = calcularEstatisticas();
+
+  if (carregando) {
+    return (
+      <div className="listar-turmas-page">
+        <p className="page-subtitle">A carregar turmas do sistema...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="listar-turmas-page">
@@ -138,6 +179,8 @@ export default function ListarTurmas() {
           Nova Turma
         </Link>
       </div>
+
+      {erroGeral && <div className="alert alert-danger">{erroGeral}</div>}
 
       {/* Estatísticas Rápidas */}
       <div className="stats-bar">
@@ -171,7 +214,7 @@ export default function ListarTurmas() {
           <input
             type="text"
             className="input-busca"
-            placeholder="Buscar por nome, código ou sala..."
+            placeholder="Buscar por nome ou ID..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -242,7 +285,6 @@ export default function ListarTurmas() {
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th>Código</th>
                   <th>Curso</th>
                   <th>Ano Letivo</th>
                   <th>Professor</th>
@@ -252,8 +294,7 @@ export default function ListarTurmas() {
               </thead>
               <tbody>
                 {turmasFiltradas.map((turma) => {
-                  const professor = obterProfessor(turma.teacher_id);
-                  const quantidadeAlunos = turma.alunos?.length || 0;
+                  const quantidadeAlunos = turma.students?.length || 0;
                   const statusLotacao =
                     quantidadeAlunos >= 25
                       ? "cheio"
@@ -268,34 +309,26 @@ export default function ListarTurmas() {
                     >
                       <td className="cell-nome">
                         <div className="turma-avatar">
-                          {turma.nome.charAt(0).toUpperCase()}
+                          {turma.nome?.charAt(0).toUpperCase() || "T"}
                         </div>
                         <div className="turma-info">
-                          <div className="turma-nome">{turma.nome}</div>
-                          {turma.sala && (
-                            <div className="turma-sala">Sala {turma.sala}</div>
-                          )}
+                          <div className="turma-nome">{turma.nome || "Sem Nome"}</div>
+                          <div className="turma-id">ID: {turma.id}</div>
                         </div>
                       </td>
-                      <td className="cell-codigo">
-                        <span className="codigo-badge">{turma.codigo}</span>
-                      </td>
                       <td className="cell-curso">
-                        <span className="badge badge-primary">{turma.curso}</span>
+                        <span className="badge badge-primary">
+                          {turma.curso || "—"}
+                        </span>
                       </td>
                       <td className="cell-ano">
-                        <span className="ano-badge">{turma.ano_letivo}</span>
+                        <span className="ano-badge">{turma.ano_letivo || "—"}</span>
                       </td>
                       <td className="cell-professor">
                         <div className="professor-info">
                           <div className="professor-nome">
-                            {professor?.user?.nome || "—"}
+                            {turma.teacher?.user?.nome || "—"}
                           </div>
-                          {professor?.departamento && (
-                            <div className="professor-dept">
-                              {professor.departamento}
-                            </div>
-                          )}
                         </div>
                       </td>
                       <td className="cell-alunos">
@@ -313,6 +346,7 @@ export default function ListarTurmas() {
                           >
                             <Eye size={16} />
                           </button>
+                          
                           <Link
                             to={`/admin/turmas/editar/${turma.id}`}
                             className="btn-icon btn-icon-edit"
@@ -320,6 +354,17 @@ export default function ListarTurmas() {
                           >
                             <Edit2 size={16} />
                           </Link>
+
+                          {/* ÍCONE ADICIONADO: Matricular Aluno nesta Turma */}
+                          <Link
+                            to="/admin/matricular"
+                            className="btn-icon btn-icon-add-student"
+                            title="Matricular Aluno"
+                            state={{ turmaId: turma.id }} // Passa o ID se quiseres pré-selecionar no MatricularAluno
+                          >
+                            <UserPlus size={16} color="#2ec4b6" />
+                          </Link>
+
                           <button
                             className="btn-icon btn-icon-delete"
                             title="Deletar"
@@ -352,7 +397,7 @@ export default function ListarTurmas() {
               <div className="detalhes-content">
                 {/* Avatar Grande */}
                 <div className="detalhes-avatar">
-                  {turmaSelecionada.nome.charAt(0).toUpperCase()}
+                  {turmaSelecionada.nome?.charAt(0).toUpperCase() || "T"}
                 </div>
 
                 {/* Informações da Turma */}
@@ -363,16 +408,8 @@ export default function ListarTurmas() {
                     <span className="value">{turmaSelecionada.nome}</span>
                   </div>
                   <div className="detalhes-item">
-                    <span className="label">Código</span>
-                    <span className="value codigo-badge">
-                      {turmaSelecionada.codigo}
-                    </span>
-                  </div>
-                  <div className="detalhes-item">
-                    <span className="label">Sala</span>
-                    <span className="value">
-                      {turmaSelecionada.sala || "—"}
-                    </span>
+                    <span className="label">ID</span>
+                    <span className="value">#{turmaSelecionada.id}</span>
                   </div>
                 </div>
 
@@ -381,29 +418,29 @@ export default function ListarTurmas() {
                   <h4>Informações Académicas</h4>
                   <div className="detalhes-item">
                     <span className="label">Curso</span>
-                    <span className="value">{turmaSelecionada.curso}</span>
+                    <span className="value">{turmaSelecionada.curso || "—"}</span>
                   </div>
                   <div className="detalhes-item">
                     <span className="label">Ano Letivo</span>
-                    <span className="value">{turmaSelecionada.ano_letivo}</span>
+                    <span className="value">{turmaSelecionada.ano_letivo || "—"}</span>
                   </div>
                 </div>
 
                 {/* Professor */}
                 <div className="detalhes-section">
                   <h4>Professor Responsável</h4>
-                  {obterProfessor(turmaSelecionada.teacher_id) ? (
+                  {turmaSelecionada.teacher ? (
                     <>
                       <div className="detalhes-item">
                         <span className="label">Nome</span>
                         <span className="value">
-                          {obterProfessor(turmaSelecionada.teacher_id)?.user?.nome}
+                          {turmaSelecionada.teacher?.user?.nome || "—"}
                         </span>
                       </div>
                       <div className="detalhes-item">
-                        <span className="label">Departamento</span>
+                        <span className="label">Email</span>
                         <span className="value">
-                          {obterProfessor(turmaSelecionada.teacher_id)?.departamento}
+                          {turmaSelecionada.teacher?.user?.email || "—"}
                         </span>
                       </div>
                     </>
@@ -412,25 +449,37 @@ export default function ListarTurmas() {
                   )}
                 </div>
 
+                {/* Status */}
+                <div className="detalhes-section">
+                  <h4>Status</h4>
+                  <div className="detalhes-item">
+                    <span className="label">Ativo</span>
+                    <span
+                      className={`status-badge ${
+                        turmaSelecionada.ativo ? "ativo" : "inativo"
+                      }`}
+                    >
+                      {turmaSelecionada.ativo ? "Sim" : "Não"}
+                    </span>
+                  </div>
+                </div>
+
                 {/* Alunos */}
                 <div className="detalhes-section">
-                  <h4>Alunos Matriculados ({turmaSelecionada.alunos?.length || 0})</h4>
-                  {turmaSelecionada.alunos?.length > 0 ? (
+                  <h4>Alunos Matriculados ({turmaSelecionada.students?.length || 0})</h4>
+                  {turmaSelecionada.students?.length > 0 ? (
                     <div className="alunos-lista">
-                      {turmaSelecionada.alunos.map((alunoId) => {
-                        const aluno = obterAluno(alunoId);
-                        return (
-                          <div key={alunoId} className="aluno-item">
-                            <div className="aluno-avatar-small">
-                              {aluno?.nome.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="aluno-detalhes">
-                              <span className="aluno-nome">{aluno?.nome}</span>
-                              <span className="aluno-email">{aluno?.email}</span>
-                            </div>
+                      {turmaSelecionada.students.map((aluno) => (
+                        <div key={aluno.id} className="aluno-item">
+                          <div className="aluno-avatar-small">
+                            {aluno.user?.nome?.charAt(0).toUpperCase()}
                           </div>
-                        );
-                      })}
+                          <div className="aluno-detalhes">
+                            <span className="aluno-nome">{aluno.user?.nome}</span>
+                            <span className="aluno-matricula">{aluno.matricula}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-muted">Nenhum aluno matriculado</p>
@@ -439,6 +488,17 @@ export default function ListarTurmas() {
 
                 {/* Botões de Ação */}
                 <div className="detalhes-actions">
+                  {/* Botão rápido extra para matricular diretamente a partir do menu lateral */}
+                  <Link
+                    to="/admin/matricular"
+                    className="btn btn-secondary btn-block"
+                    state={{ turmaId: turmaSelecionada.id }}
+                    style={{ marginBottom: "8px", backgroundColor: "#2ec4b6", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                  >
+                    <UserPlus size={16} />
+                    Matricular Aluno
+                  </Link>
+                  
                   <Link
                     to={`/admin/turmas/editar/${turmaSelecionada.id}`}
                     className="btn btn-primary btn-block"
@@ -448,10 +508,7 @@ export default function ListarTurmas() {
                   </Link>
                   <button
                     className="btn btn-outline btn-block btn-danger"
-                    onClick={() => {
-                      deletarTurma(turmaSelecionada.id);
-                      setTurmaSelecionada(null);
-                    }}
+                    onClick={() => deletarTurma(turmaSelecionada.id)}
                   >
                     <Trash2 size={16} />
                     Deletar
@@ -470,12 +527,16 @@ export default function ListarTurmas() {
             <h3>Confirmar Eliminação</h3>
             <p>
               Tem certeza que deseja eliminar esta turma? Esta ação não pode ser
-              desfeita.
+              desfeita e apagará o registro no servidor.
             </p>
             <div className="modal-actions">
               <button
                 className="btn btn-outline"
-                onClick={() => setShowConfirm(false)}
+                onClick={() => {
+                  setShowConfirm(false);
+                  setTurmaParaDeletar(null);
+                  setTurmaSelecionada(null);
+                }}
               >
                 Cancelar
               </button>

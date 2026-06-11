@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
-import { criarProfessor, gerarMatriculaProfessor, verificarEmailExistente } from "../../utils/mockUsers";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import api from "../../services/api.js";
 import "../../styles/CriarProfessor.css";
 
 export default function CriarProfessor() {
   const navigate = useNavigate();
   const [etapa, setEtapa] = useState(1); // 1: Usuário, 2: Perfil Professor
 
-  // Dados do Usuário
+  // Dados do Utilizador (Fase 1)
   const [userData, setUserData] = useState({
     nome: "",
     email: "",
@@ -16,56 +16,45 @@ export default function CriarProfessor() {
     confirmarSenha: "",
   });
 
-  // Dados do Professor
+  // Dados do Professor (Fase 2)
   const [professorData, setProfessorData] = useState({
-    matricula: gerarMatriculaProfessor(),
-    departamento: "Ciências",
-    disciplinas: [],
+    matricula: "", // Deixamos vazio para o gestor digitar ou ser gerado pelo backend
+    departamento: "Ciências Exatas",
+    disciplinas: [], // O teu backend espera uma string (ex: 'Matemática, Física') ou array dependendo da migração
   });
 
   const [erros, setErros] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
+  // ID do utilizador retornado após salvar a Etapa 1
+  const [createdUserId, setCreatedUserId] = useState(null);
+
   const disciplinasDisponiveis = [
-    "Matemática",
-    "Português",
-    "Inglês",
-    "Física",
-    "Química",
-    "Biologia",
-    "História",
-    "Geografia",
-    "Educação Física",
-    "Artes",
-    "Tecnologias da Informação",
+    "Matemática", "Português", "Inglês", "Física", "Química",
+    "Biologia", "História", "Geografia", "Educação Física",
+    "Artes", "Tecnologias da Informação",
   ];
 
   const departamentosDisponiveis = [
-    "Ciências Exatas",
-    "Ciências Naturais",
-    "Humanidades",
-    "Linguagem",
-    "Educação Física",
-    "Artes",
+    "Ciências Exatas", "Ciências Naturais", "Humanidades",
+    "Linguagem", "Educação Física", "Artes",
   ];
 
-  // Validação da Etapa 1 (Usuário)
+  // Validação Local da Etapa 1
   function validarEtapa1() {
     const novosErros = {};
 
     if (!userData.nome.trim()) {
       novosErros.nome = "Nome é obrigatório";
-    } else if (userData.nome.trim().length < 3) {
-      novosErros.nome = "Nome deve ter pelo menos 3 caracteres";
+    } else if (userData.nome.trim().length < 5) {
+      novosErros.nome = "O nome deve ter entre 5 e 150 caracteres (Regra API)";
     }
 
     if (!userData.email.trim()) {
       novosErros.email = "Email é obrigatório";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
       novosErros.email = "Email inválido";
-    } else if (verificarEmailExistente(userData.email)) {
-      novosErros.email = "Este email já está registado";
     }
 
     if (!userData.senha) {
@@ -75,20 +64,16 @@ export default function CriarProfessor() {
     }
 
     if (userData.senha !== userData.confirmarSenha) {
-      novosErros.confirmarSenha = "Senhas não correspondem";
+      novosErros.confirmarSenha = "As senhas não correspondem";
     }
 
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
 
-  // Validação da Etapa 2 (Professor)
+  // Validação Local da Etapa 2
   function validarEtapa2() {
     const novosErros = {};
-
-    if (!professorData.matricula.trim()) {
-      novosErros.matricula = "Matrícula é obrigatória";
-    }
 
     if (!professorData.departamento.trim()) {
       novosErros.departamento = "Departamento é obrigatório";
@@ -102,25 +87,46 @@ export default function CriarProfessor() {
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar para próxima etapa
-  function avancar() {
-    if (etapa === 1) {
-      if (validarEtapa1()) {
-        setEtapa(2);
+  // Avançar para a Etapa 2 realizando o primeiro insert na BD
+  async function avancar() {
+    if (!validarEtapa1()) return;
+
+    setCarregando(true);
+    setErros({});
+
+    try {
+      // Executa o POST para a rota /users do teu UserController
+      const response = await api.post("/users", {
+        nome: userData.nome,
+        email: userData.email,
+        senha: userData.senha,
+        tipo: "professor", // Forçamos o tipo para professor nesta tela
+      });
+
+      // Guardamos o ID gerado pelo banco de dados para usar na etapa seguinte
+      setCreatedUserId(response.data.id);
+      setEtapa(2);
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data.error) {
+        setErros({ email: error.response.data.error });
+      } else {
+        setErros({ geral: "Erro ao validar utilizador no servidor." });
       }
+    } finally {
+      setCarregando(false);
     }
   }
 
-  // Voltar para etapa anterior
   function voltar() {
     if (etapa === 2) {
+      // Opcional: Se o usuário voltar, idealmente a conta já foi criada, 
+      // mas podemos permitir que ele avance reajustando os dados profissionais.
       setEtapa(1);
     } else {
       navigate("/admin/professores");
     }
   }
 
-  // Adicionar/Remover disciplina
   function toggleDisciplina(disciplina) {
     setProfessorData((prev) => {
       const disciplinas = prev.disciplinas.includes(disciplina)
@@ -130,37 +136,40 @@ export default function CriarProfessor() {
     });
   }
 
-  // Submeter formulário
+  // Submissão Final (Etapa 2)
   async function handleSubmit(e) {
     e.preventDefault();
 
     if (etapa === 1) {
-      avancar();
+      await avancar();
       return;
     }
 
-    if (!validarEtapa2()) {
-      return;
-    }
+    if (!validarEtapa2()) return;
 
     setCarregando(true);
+    setErros({});
 
     try {
-      // Simula delay de API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Como o teu Teacher Model espera a estrutura do TeacherController:
+      // O teu backend recebe: user_id, departamento, disciplina
+      await api.post("/teachers", {
+        user_id: createdUserId,
+        departamento: professorData.departamento,
+        // Convertemos o array para string caso o teu campo 'disciplina' seja um VARCHAR simples na base de dados
+        disciplina: professorData.disciplinas.join(", "), 
+      });
 
-      const resultado = criarProfessor(userData, professorData);
-
-      if (resultado.sucesso) {
-        setSucesso(true);
-        setTimeout(() => {
-          navigate("/admin/professores");
-        }, 1500);
-      } else {
-        setErros({ geral: resultado.erro });
-      }
+      setSucesso(true);
+      setTimeout(() => {
+        navigate("/admin/professores");
+      }, 2000);
     } catch (error) {
-      setErros({ geral: "Erro ao criar professor. Tente novamente." });
+      if (error.response && error.response.data && error.response.data.error) {
+        setErros({ geral: error.response.data.error });
+      } else {
+        setErros({ geral: "Erro ao vincular dados profissionais do professor." });
+      }
     } finally {
       setCarregando(false);
     }
@@ -169,7 +178,7 @@ export default function CriarProfessor() {
   return (
     <div className="criar-professor-page">
       <div className="page-header">
-        <button className="btn-back" onClick={voltar}>
+        <button type="button" className="btn-back" onClick={voltar}>
           <ArrowLeft size={20} />
         </button>
         <div>
@@ -184,6 +193,7 @@ export default function CriarProfessor() {
 
       <div className="criar-professor-container">
         <form className="criar-professor-form" onSubmit={handleSubmit}>
+          
           {/* Indicador de Etapas */}
           <div className="etapas-indicator">
             <div className={`etapa ${etapa >= 1 ? "ativa" : ""}`}>
@@ -197,28 +207,22 @@ export default function CriarProfessor() {
             </div>
           </div>
 
-          {/* Mensagem de Erro Geral */}
-          {erros.geral && (
-            <div className="alert alert-danger">
-              {erros.geral}
-            </div>
-          )}
+          {/* Erros Gerais */}
+          {erros.geral && <div className="alert alert-danger">{erros.geral}</div>}
 
-          {/* Mensagem de Sucesso */}
+          {/* Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
-              ✓ Professor criado com sucesso! Redirecionando...
+              ✓ Professor registado com sucesso na Base de Dados! Redirecionando...
             </div>
           )}
 
-          {/* ETAPA 1: DADOS DO USUÁRIO */}
+          {/* ETAPA 1: DADOS DE ACESSO */}
           {etapa === 1 && (
             <>
               <div className="form-section">
                 <h2>Dados de Acesso</h2>
-                <p className="section-desc">
-                  Crie uma conta para o novo professor
-                </p>
+                <p className="section-desc">Crie a conta base para o sistema de autenticação</p>
               </div>
 
               <div className="form-group">
@@ -229,6 +233,7 @@ export default function CriarProfessor() {
                   placeholder="Mário Tavares"
                   value={userData.nome}
                   onChange={(e) => setUserData({ ...userData, nome: e.target.value })}
+                  disabled={carregando}
                 />
                 {erros.nome && <span className="error-msg">{erros.nome}</span>}
               </div>
@@ -241,6 +246,7 @@ export default function CriarProfessor() {
                   placeholder="mario.tavares@edutrack.pt"
                   value={userData.email}
                   onChange={(e) => setUserData({ ...userData, email: e.target.value })}
+                  disabled={carregando}
                 />
                 {erros.email && <span className="error-msg">{erros.email}</span>}
               </div>
@@ -254,6 +260,7 @@ export default function CriarProfessor() {
                     placeholder="••••••••"
                     value={userData.senha}
                     onChange={(e) => setUserData({ ...userData, senha: e.target.value })}
+                    disabled={carregando}
                   />
                   {erros.senha && <span className="error-msg">{erros.senha}</span>}
                 </div>
@@ -265,83 +272,50 @@ export default function CriarProfessor() {
                     className={`input ${erros.confirmarSenha ? "is-invalid" : ""}`}
                     placeholder="••••••••"
                     value={userData.confirmarSenha}
-                    onChange={(e) =>
-                      setUserData({ ...userData, confirmarSenha: e.target.value })
-                    }
+                    onChange={(e) => setUserData({ ...userData, confirmarSenha: e.target.value })}
+                    disabled={carregando}
                   />
-                  {erros.confirmarSenha && (
-                    <span className="error-msg">{erros.confirmarSenha}</span>
-                  )}
+                  {erros.confirmarSenha && <span className="error-msg">{erros.confirmarSenha}</span>}
                 </div>
               </div>
             </>
           )}
 
-          {/* ETAPA 2: DADOS DO PROFESSOR */}
+          {/* ETAPA 2: DADOS PROFISSIONAIS */}
           {etapa === 2 && (
             <>
               <div className="form-section">
                 <h2>Dados Profissionais</h2>
-                <p className="section-desc">
-                  Defina as responsabilidades e disciplinas do professor
-                </p>
+                <p className="section-desc">Defina o departamento e as áreas de ensino</p>
               </div>
 
               <div className="form-group">
-                <label className="label">Email (Leitura) *</label>
-                <input
-                  type="email"
-                  className="input is-disabled"
-                  value={userData.email}
-                  disabled
-                />
-                <span className="input-hint">Email do usuário criado</span>
-              </div>
-
-              <div className="form-group">
-                <label className="label">Matrícula *</label>
+                <label className="label">Utilizador Vinculado (Apenas Leitura)</label>
                 <input
                   type="text"
-                  className={`input ${erros.matricula ? "is-invalid" : ""}`}
-                  placeholder="PROF-2024-001"
-                  value={professorData.matricula}
-                  onChange={(e) =>
-                    setProfessorData({ ...professorData, matricula: e.target.value })
-                  }
+                  className="input is-disabled"
+                  value={`${userData.nome} (${userData.email})`}
+                  disabled
                 />
-                {erros.matricula && (
-                  <span className="error-msg">{erros.matricula}</span>
-                )}
-                <span className="input-hint">
-                  Número único do professor no sistema
-                </span>
               </div>
 
               <div className="form-group">
                 <label className="label">Departamento *</label>
                 <select
-                  className={`input ${erros.departamento ? "is-invalid" : ""}`}
+                  className="input"
                   value={professorData.departamento}
-                  onChange={(e) =>
-                    setProfessorData({ ...professorData, departamento: e.target.value })
-                  }
+                  onChange={(e) => setProfessorData({ ...professorData, departamento: e.target.value })}
+                  disabled={carregando}
                 >
                   {departamentosDisponiveis.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
+                    <option key={dept} value={dept}>{dept}</option>
                   ))}
                 </select>
-                {erros.departamento && (
-                  <span className="error-msg">{erros.departamento}</span>
-                )}
               </div>
 
               <div className="form-group">
                 <label className="label">Disciplinas *</label>
-                <p className="section-desc-small">
-                  Selecione todas as disciplinas que este professor leciona
-                </p>
+                <p className="section-desc-small">Selecione as disciplinas atribuídas a este professor</p>
                 <div className="disciplinas-grid">
                   {disciplinasDisponiveis.map((disciplina) => (
                     <label
@@ -354,19 +328,18 @@ export default function CriarProfessor() {
                         type="checkbox"
                         checked={professorData.disciplinas.includes(disciplina)}
                         onChange={() => toggleDisciplina(disciplina)}
+                        disabled={carregando}
                       />
                       <span className="checkbox-label">{disciplina}</span>
                     </label>
                   ))}
                 </div>
-                {erros.disciplinas && (
-                  <span className="error-msg">{erros.disciplinas}</span>
-                )}
+                {erros.disciplinas && <span className="error-msg">{erros.disciplinas}</span>}
               </div>
             </>
           )}
 
-          {/* Botões de Ação */}
+          {/* Botões de Controlo */}
           <div className="form-actions">
             <button
               type="button"
@@ -374,7 +347,7 @@ export default function CriarProfessor() {
               onClick={voltar}
               disabled={carregando}
             >
-              Cancelar
+              {etapa === 2 ? "Voltar" : "Cancelar"}
             </button>
 
             {etapa === 1 ? (
@@ -384,7 +357,13 @@ export default function CriarProfessor() {
                 onClick={avancar}
                 disabled={carregando}
               >
-                Continuar
+                {carregando ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Loader2 size={16} className="animate-spin" /> Processando...
+                  </span>
+                ) : (
+                  "Avançar Passo"
+                )}
               </button>
             ) : (
               <button
@@ -392,17 +371,25 @@ export default function CriarProfessor() {
                 className="btn btn-hero"
                 disabled={carregando}
               >
-                <Save size={18} />
-                {carregando ? "Criando..." : "Criar Professor"}
+                {carregando ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Loader2 size={16} className="animate-spin" /> Salvando...
+                  </span>
+                ) : (
+                  <>
+                    <Save size={18} />
+                    <span>Concluir Cadastro</span>
+                  </>
+                )}
               </button>
             )}
           </div>
         </form>
 
-        {/* Card de Resumo */}
+        {/* Painel lateral de Resumo */}
         {etapa === 2 && (
           <div className="form-resumo">
-            <h3>Resumo</h3>
+            <h3>Resumo do Registo</h3>
             <div className="resumo-item">
               <span className="resumo-label">Nome:</span>
               <span className="resumo-value">{userData.nome}</span>
@@ -412,15 +399,11 @@ export default function CriarProfessor() {
               <span className="resumo-value">{userData.email}</span>
             </div>
             <div className="resumo-item">
-              <span className="resumo-label">Matrícula:</span>
-              <span className="resumo-value">{professorData.matricula}</span>
-            </div>
-            <div className="resumo-item">
               <span className="resumo-label">Departamento:</span>
               <span className="resumo-value">{professorData.departamento}</span>
             </div>
             <div className="resumo-section">
-              <span className="resumo-label">Disciplinas:</span>
+              <span className="resumo-label">Disciplinas Selecionadas:</span>
               <div className="disciplinas-resumo">
                 {professorData.disciplinas.map((d) => (
                   <span key={d} className="badge badge-primary">

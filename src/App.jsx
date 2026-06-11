@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import ForgetPassword from './pages/ForgetPassword.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 
+
 import AdminLayout from './components/layout/AdminLayout.jsx';
 import DashboardAdmin from './pages/admin/DashboardAdmin.jsx';
 import CriarAluno from './pages/admin/CriarAluno.jsx';
@@ -43,6 +44,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/recuperar-senha" element={<ForgetPassword />} />
         <Route path="/redefinir-senha" element={<ResetPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Rotas do Admin */}
         <Route path="/admin" element={<AdminLayout />}>
@@ -51,7 +53,7 @@ function App() {
           <Route path="/admin/aluno/criar" element={<CriarAluno />} />
           <Route path="/admin/alunos/" element={<ListarAlunos />} />
           <Route path="/admin/alunos/editar/:id" element={<CriarAluno />} />
-          <Route path="alunos/matricular" element={<MatricularAluno />} />
+          <Route path="/admin/matricular" element={<MatricularAluno />} />
           <Route path="/admin/professor/criar" element={<CriarProfessor />} />
           <Route path="/admin/professores" element={<ListarProfessores />} />
           <Route path="/admin/professores/editar/:id" element={<CriarProfessor />} />

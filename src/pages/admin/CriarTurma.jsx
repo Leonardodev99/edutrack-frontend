@@ -1,41 +1,88 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
-import { criarTurma, gerarCodigoTurma, nomeProfessor } from "../../utils/adminMockData";
-import { professoresStore, usersStore } from "../../utils/mockUsers";
+import { ArrowLeft, Save, Plus, List } from "lucide-react";
+import api from "../../services/api"; 
 import "../../styles/CriarTurma.css";
 
 export default function CriarTurma() {
   const navigate = useNavigate();
 
-  // Dados da Turma
+  // Dados da Turma ajustados para o Backend
   const [turmaData, setTurmaData] = useState({
     nome: "",
-    ano_letivo: new Date().getFullYear() + "/" + (new Date().getFullYear() + 1),
+    ano_letivo: new Date().getFullYear(),
     curso: "Ensino Secundário",
     teacher_id: "",
-    codigo: gerarCodigoTurma(),
   });
 
-  const [erros, setErros] = useState({});
-  const [carregando, setCarregando] = useState(false);
-  const [sucesso, setSucesso] = useState(false);
-
-  const cursosDisponiveis = [
+  // Estados para dados dinâmicos do Banco
+  const [professoresDisponiveis, setProfessoresDisponiveis] = useState([]);
+  const [cursosDisponiveis, setCursosDisponiveis] = useState([
     "Ensino Básico",
     "Ensino Secundário",
     "Cursos Profissionais",
-  ];
+  ]);
 
-  // Obter professores disponíveis - usando mockUsers
-  const professoresDisponiveis = professoresStore.list().map((prof) => ({
-    ...prof,
-    user: usersStore.get(prof.user_id),
-  }));
+  // Estados de controle de interface e feedback
+  const [cursoCustomizado, setCursoCustomizado] = useState(false);
+  const [novoCursoNome, setNovoCursoNome] = useState("");
+  const [erros, setErros] = useState({});
+  const [carregando, setCarregando] = useState(false);
+  const [carregandoDados, setCarregandoDados] = useState(true);
+  const [sucesso, setSucesso] = useState(false);
 
-  // Validação
+  // 📌 Carregar dados reais do Banco de Dados ao montar o componente
+  useEffect(() => {
+    async function carregarDadosIniciais() {
+      try {
+        setCarregandoDados(true);
+        const token = localStorage.getItem("@EduTrack:token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // 1️⃣ Busca os professores reais cadastrados no sistema
+        // Ajuste a rota se no seu backend for diferente de '/teachers'
+        const responseProfessores = await api.get("/teachers", { headers });
+        setProfessoresDisponiveis(responseProfessores.data);
+
+        // 2️⃣ Opcional: Buscar cursos já cadastrados nas turmas existentes para alimentar o Select
+        const responseTurmas = await api.get("/classes", { headers });
+        if (responseTurmas.data && responseTurmas.data.length > 0) {
+          const cursosDoBanco = responseTurmas.data.map((t) => t.curso);
+          // Junta os padrões com os do banco tirando duplicados
+          const cursosUnicos = Array.from(
+            new Set([...cursosDisponiveis, ...cursosDoBanco])
+          ).filter(Boolean);
+          setCursosDisponiveis(cursosUnicos);
+        }
+
+      } catch (error) {
+        console.error("Erro ao carregar dados iniciais do banco:", error);
+        setErros({ geral: "Erro ao conectar com o servidor para carregar professores." });
+      } finally {
+        setCarregandoDados(false);
+      }
+    }
+
+    carregarDadosIniciais();
+  }, []);
+
+  // Alternador para curso novo escrito manualmente
+  function handleAlternarCursoCustomizado() {
+    if (cursoCustomizado) {
+      // Voltando para o select
+      setTurmaData({ ...turmaData, curso: cursosDisponiveis[0] || "" });
+    } else {
+      // Indo para o input de texto livre
+      setTurmaData({ ...turmaData, curso: "" });
+      setNovoCursoNome("");
+    }
+    setCursoCustomizado(!cursoCustomizado);
+  }
+
+  // Validação do Frontend
   function validar() {
     const novosErros = {};
+    const cursoFinal = cursoCustomizado ? novoCursoNome.trim() : turmaData.curso.trim();
 
     if (!turmaData.nome.trim()) {
       novosErros.nome = "Nome da turma é obrigatório";
@@ -43,14 +90,15 @@ export default function CriarTurma() {
       novosErros.nome = "Nome deve ter pelo menos 2 caracteres";
     }
 
-    if (!turmaData.ano_letivo.trim()) {
+    const anoNum = Number(turmaData.ano_letivo);
+    if (!turmaData.ano_letivo) {
       novosErros.ano_letivo = "Ano letivo é obrigatório";
-    } else if (!/^\d{4}\/\d{4}$/.test(turmaData.ano_letivo)) {
-      novosErros.ano_letivo = "Formato deve ser: 2024/2025";
+    } else if (isNaN(anoNum) || anoNum < 2000 || anoNum > new Date().getFullYear() + 1) {
+      novosErros.ano_letivo = `Ano inválido (entre 2000 e ${new Date().getFullYear() + 1})`;
     }
 
-    if (!turmaData.curso.trim()) {
-      novosErros.curso = "Curso é obrigatório";
+    if (!cursoFinal) {
+      novosErros.curso = "O nome do curso é obrigatório";
     }
 
     if (!turmaData.teacher_id) {
@@ -61,53 +109,61 @@ export default function CriarTurma() {
     return Object.keys(novosErros).length === 0;
   }
 
-  // Voltar
   function voltar() {
     navigate("/admin/turmas");
   }
 
-  // Submeter formulário
+  // Submeter formulário para a API real
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (!validar()) {
-      return;
-    }
+    if (!validar()) return;
 
     setCarregando(true);
+    setErros({});
+
+    const cursoFinal = cursoCustomizado ? novoCursoNome.trim() : turmaData.curso.trim();
 
     try {
-      // Simula delay de API
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const token = localStorage.getItem("@EduTrack:token");
 
-      const resultado = criarTurma(turmaData);
+      await api.post(
+        "/classes",
+        {
+          nome: turmaData.nome,
+          ano_letivo: Number(turmaData.ano_letivo),
+          curso: cursoFinal,
+          teacher_id: Number(turmaData.teacher_id),
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
-      if (resultado.sucesso) {
-        setSucesso(true);
-        setTimeout(() => {
-          navigate("/admin/turmas");
-        }, 1500);
-      } else {
-        setErros({ geral: resultado.erro });
-      }
+      setSucesso(true);
+      setTimeout(() => {
+        navigate("/admin/turmas");
+      }, 1500);
+
     } catch (error) {
-      setErros({ geral: "Erro ao criar turma. Tente novamente." });
+      const msgErro = error.response?.data?.error || "Erro ao criar turma. Tente novamente.";
+      setErros({ geral: msgErro });
     } finally {
       setCarregando(false);
     }
   }
 
-  // Obter nome do professor
   function obterNomeProfessor(teacherId) {
     const prof = professoresDisponiveis.find((p) => p.id == teacherId);
-    return prof?.user?.nome || "";
+    return prof?.user?.nome || "Não encontrado";
   }
 
-  // Formatar ano letivo
-  function formatarAnoLetivo(valor) {
-    const digitos = valor.replace(/\D/g, "");
-    if (digitos.length <= 4) return digitos;
-    return `${digitos.slice(0, 4)}/${digitos.slice(4, 8)}`;
+  if (carregandoDados) {
+    return (
+      <div className="criar-turma-page">
+        <p className="page-subtitle">Sincronizando dados com o servidor...</p>
+      </div>
+    );
   }
 
   return (
@@ -118,34 +174,22 @@ export default function CriarTurma() {
         </button>
         <div>
           <h1 className="page-title">Criar Turma</h1>
-          <p className="page-subtitle">
-            Configure os dados da nova turma
-          </p>
+          <p className="page-subtitle">Configure os dados da nova turma baseados no sistema real</p>
         </div>
       </div>
 
       <div className="criar-turma-container">
         <form className="criar-turma-form" onSubmit={handleSubmit}>
-          {/* Mensagem de Erro Geral */}
-          {erros.geral && (
-            <div className="alert alert-danger">
-              {erros.geral}
-            </div>
-          )}
-
-          {/* Mensagem de Sucesso */}
+          {erros.geral && <div className="alert alert-danger">{erros.geral}</div>}
           {sucesso && (
             <div className="alert alert-success">
               ✓ Turma criada com sucesso! Redirecionando...
             </div>
           )}
 
-          {/* Seção de Informações Básicas */}
           <div className="form-section">
             <h2>Informações Básicas</h2>
-            <p className="section-desc">
-              Configure os dados principais da turma
-            </p>
+            <p className="section-desc">Configure os dados principais da turma</p>
           </div>
 
           <div className="form-row">
@@ -156,9 +200,7 @@ export default function CriarTurma() {
                 className={`input ${erros.nome ? "is-invalid" : ""}`}
                 placeholder="10º A"
                 value={turmaData.nome}
-                onChange={(e) =>
-                  setTurmaData({ ...turmaData, nome: e.target.value })
-                }
+                onChange={(e) => setTurmaData({ ...turmaData, nome: e.target.value })}
               />
               {erros.nome && <span className="error-msg">{erros.nome}</span>}
               <span className="input-hint">Ex: 10º A, 11º B, 12º C</span>
@@ -167,93 +209,98 @@ export default function CriarTurma() {
             <div className="form-group">
               <label className="label">Ano Letivo *</label>
               <input
-                type="text"
+                type="number"
+                min="2000"
+                max={new Date().getFullYear() + 1}
                 className={`input ${erros.ano_letivo ? "is-invalid" : ""}`}
-                placeholder="2024/2025"
+                placeholder="2026"
                 value={turmaData.ano_letivo}
-                onChange={(e) =>
-                  setTurmaData({
-                    ...turmaData,
-                    ano_letivo: formatarAnoLetivo(e.target.value),
-                  })
-                }
+                onChange={(e) => setTurmaData({ ...turmaData, ano_letivo: e.target.value })}
               />
-              {erros.ano_letivo && (
-                <span className="error-msg">{erros.ano_letivo}</span>
-              )}
-              <span className="input-hint">Formato: AAAA/AAAA</span>
+              {erros.ano_letivo && <span className="error-msg">{erros.ano_letivo}</span>}
+              <span className="input-hint">Formato: AAAA (Ex: 2026)</span>
             </div>
           </div>
 
+          {/* 📌 Campo de Curso Dinâmico e Customizável */}
           <div className="form-group">
-            <label className="label">Curso *</label>
-            <select
-              className={`input ${erros.curso ? "is-invalid" : ""}`}
-              value={turmaData.curso}
-              onChange={(e) =>
-                setTurmaData({ ...turmaData, curso: e.target.value })
-              }
-            >
-              {cursosDisponiveis.map((curso) => (
-                <option key={curso} value={curso}>
-                  {curso}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "flex", justifyContent: "between", alignItems: "center", marginBottom: "4px" }}>
+              <label className="label" style={{ flex: 1 }}>Curso *</label>
+              <button
+                type="button"
+                onClick={handleAlternarCursoCustomizado}
+                className="btn-link"
+                style={{ fontSize: "12px", background: "none", border: "none", color: "#3b82f6", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+              >
+                {cursoCustomizado ? (
+                  <>
+                    <List size={14} /> Selecionar Existente
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} /> Escrever Novo Curso
+                  </>
+                )}
+              </button>
+            </div>
+
+            {cursoCustomizado ? (
+              <input
+                type="text"
+                className={`input ${erros.curso ? "is-invalid" : ""}`}
+                placeholder="Digite o nome do novo curso..."
+                value={novoCursoNome}
+                onChange={(e) => setNovoCursoNome(e.target.value)}
+              />
+            ) : (
+              <select
+                className={`input ${erros.curso ? "is-invalid" : ""}`}
+                value={turmaData.curso}
+                onChange={(e) => setTurmaData({ ...turmaData, curso: e.target.value })}
+              >
+                {cursosDisponiveis.map((curso) => (
+                  <option key={curso} value={curso}>
+                    {curso}
+                  </option>
+                ))}
+              </select>
+            )}
             {erros.curso && <span className="error-msg">{erros.curso}</span>}
           </div>
 
-          {/* Seção de Professor Responsável */}
           <div className="form-section">
             <h2>Professor Responsável</h2>
-            <p className="section-desc">
-              Selecione o professor coordenador da turma
-            </p>
+            <p className="section-desc">Selecione o professor coordenador a partir dos registros do banco</p>
           </div>
 
           <div className="form-group">
             <label className="label">Professor *</label>
             {professoresDisponiveis.length === 0 ? (
               <div className="empty-professores">
-                <p>Nenhum professor disponível no sistema</p>
+                <p style={{ color: '#ef4444' }}>Nenhum professor cadastrado no banco de dados.</p>
               </div>
             ) : (
               <select
                 className={`input ${erros.teacher_id ? "is-invalid" : ""}`}
                 value={turmaData.teacher_id}
-                onChange={(e) =>
-                  setTurmaData({ ...turmaData, teacher_id: e.target.value })
-                }
+                onChange={(e) => setTurmaData({ ...turmaData, teacher_id: e.target.value })}
               >
                 <option value="">Selecione um professor...</option>
                 {professoresDisponiveis.map((prof) => (
                   <option key={prof.id} value={prof.id}>
-                    {prof.user?.nome} ({prof.departamento})
+                    {prof.user?.nome || "Professor sem nome"} ({prof.materia || "Geral"})
                   </option>
                 ))}
               </select>
             )}
-            {erros.teacher_id && (
-              <span className="error-msg">{erros.teacher_id}</span>
-            )}
+            {erros.teacher_id && <span className="error-msg">{erros.teacher_id}</span>}
           </div>
 
-          {/* Botões de Ação */}
           <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={voltar}
-              disabled={carregando}
-            >
+            <button type="button" className="btn btn-outline" onClick={voltar} disabled={carregando}>
               Cancelar
             </button>
-
-            <button
-              type="submit"
-              className="btn btn-hero"
-              disabled={carregando}
-            >
+            <button type="submit" className="btn btn-hero" disabled={carregando || professoresDisponiveis.length === 0}>
               <Save size={18} />
               {carregando ? "Criando..." : "Criar Turma"}
             </button>
@@ -264,42 +311,24 @@ export default function CriarTurma() {
         <div className="form-resumo">
           <h3>Resumo</h3>
           <div className="resumo-item">
-            <span className="resumo-label">Código:</span>
-            <span className="resumo-value codigo-badge">{turmaData.codigo}</span>
-          </div>
-          <div className="resumo-item">
             <span className="resumo-label">Nome:</span>
-            <span className="resumo-value">
-              {turmaData.nome || "—"}
-            </span>
+            <span className="resumo-value">{turmaData.nome || "—"}</span>
           </div>
           <div className="resumo-item">
             <span className="resumo-label">Ano Letivo:</span>
-            <span className="resumo-value">
-              {turmaData.ano_letivo || "—"}
-            </span>
+            <span className="resumo-value">{turmaData.ano_letivo || "—"}</span>
           </div>
           <div className="resumo-item">
             <span className="resumo-label">Curso:</span>
             <span className="resumo-value">
-              {turmaData.curso || "—"}
+              {cursoCustomizado ? novoCursoNome || "Escrevendo..." : turmaData.curso || "—"}
             </span>
           </div>
           <div className="resumo-item">
             <span className="resumo-label">Professor:</span>
             <span className="resumo-value">
-              {turmaData.teacher_id
-                ? obterNomeProfessor(turmaData.teacher_id)
-                : "—"}
+              {turmaData.teacher_id ? obterNomeProfessor(turmaData.teacher_id) : "—"}
             </span>
-          </div>
-
-          <div className="resumo-info">
-            <strong>ℹ Informação:</strong>
-            <p>
-              Após criar a turma, você poderá adicionar alunos e configurar
-              mais detalhes conforme necessário.
-            </p>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Plus,
@@ -6,51 +6,65 @@ import {
   Edit2,
   Trash2,
   Eye,
-  Filter,
   ChevronDown,
   Mail,
   Phone,
   Users,
 } from "lucide-react";
-import { encarregadosStore, usersStore, alunosStore } from "../../utils/mockUsers.js";
+import api from "../../services/api";
 import "../../styles/ListarEncarregados.css";
 
 export default function ListarEncarregados() {
-  const [encarregados, setEncarregados] = useState(encarregadosStore.list());
+  const [encarregados, setEncarregados] = useState([]);
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("nome");
   const [encarregadoSelecionado, setEncarregadoSelecionado] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [encarregadoParaDeletar, setEncarregadoParaDeletar] = useState(null);
+  
+  // Estados de carregamento e feedback
+  const [carregando, setCarregando] = useState(true);
+  const [erroGeral, setErroGeral] = useState("");
 
-  // Obter dados do usuário associado
-  function obterUsuarioEncarregado(userId) {
-    return usersStore.get(userId) || null;
+  // Função para buscar dados da API
+  async function carregarEncarregados() {
+    setCarregando(true);
+    setErroGeral("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      // GET /guardians - retorna todos os encarregados com include de user e students
+      const response = await api.get("/guardians", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setEncarregados(response.data);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar lista de encarregados.";
+      setErroGeral(msg);
+    } finally {
+      setCarregando(false);
+    }
   }
 
-  // Obter nome do aluno
-  function obterNomeAluno(alunoId) {
-    const aluno = alunosStore.get(alunoId);
-    if (!aluno) return "—";
-    const user = usersStore.get(aluno.user_id);
-    return user?.nome || "—";
-  }
+  // Carrega ao montar a tela
+  useEffect(() => {
+    carregarEncarregados();
+  }, []);
 
-  // Filtrar e ordenar encarregados
+  // Filtrar e ordenar encarregados de forma reativa usando useMemo
   const encarregadosFiltrados = useMemo(() => {
-    let resultado = encarregados.map((enc) => ({
-      ...enc,
-      user: obterUsuarioEncarregado(enc.user_id),
-    }));
+    let resultado = [...encarregados];
 
     // Filtro de busca
     if (busca) {
+      const buscaLower = busca.toLowerCase();
       resultado = resultado.filter(
         (e) =>
-          e.user?.nome.toLowerCase().includes(busca.toLowerCase()) ||
-          e.user?.email.toLowerCase().includes(busca.toLowerCase()) ||
-          e.matricula.toLowerCase().includes(busca.toLowerCase()) ||
-          e.telefone.toLowerCase().includes(busca.toLowerCase())
+          e.user?.nome?.toLowerCase().includes(buscaLower) ||
+          e.user?.email?.toLowerCase().includes(buscaLower) ||
+          e.telefone?.toLowerCase().includes(buscaLower) ||
+          e.id?.toString().includes(buscaLower)
       );
     }
 
@@ -62,9 +76,9 @@ export default function ListarEncarregados() {
         case "email":
           return (a.user?.email || "").localeCompare(b.user?.email || "");
         case "telefone":
-          return a.telefone.localeCompare(b.telefone);
+          return (a.telefone || "").localeCompare(b.telefone || "");
         case "alunos":
-          return (b.estudantes?.length || 0) - (a.estudantes?.length || 0);
+          return (b.students?.length || 0) - (a.students?.length || 0);
         default:
           return 0;
       }
@@ -73,24 +87,42 @@ export default function ListarEncarregados() {
     return resultado;
   }, [encarregados, busca, ordenacao]);
 
-  // Deletar encarregado
-  function deletarEncarregado(id, userId) {
-    setEncarregadoParaDeletar({ id, userId });
+  // Disparar fluxo de exclusão
+  function deletarEncarregado(id) {
+    setEncarregadoParaDeletar(id);
     setShowConfirm(true);
   }
 
-  function confirmarDelete() {
-    if (encarregadoParaDeletar) {
-      // Remove encarregado
-      encarregadosStore.remove(encarregadoParaDeletar.id);
-      // Remove usuário associado
-      usersStore.remove(encarregadoParaDeletar.userId);
+  // Confirmar exclusão no Back-end (Apenas Gestor pode remover)
+  async function confirmarDelete() {
+    if (!encarregadoParaDeletar) return;
 
-      setEncarregados(encarregadosStore.list());
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      
+      // Chama a rota DELETE /guardians/:id
+      await api.delete(`/guardians/${encarregadoParaDeletar}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Atualiza o estado removendo localmente
+      setEncarregados((prev) => prev.filter((e) => e.id !== encarregadoParaDeletar));
       setShowConfirm(false);
       setEncarregadoParaDeletar(null);
       setEncarregadoSelecionado(null);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Apenas gestores podem eliminar encarregados.";
+      alert(msg);
+      setShowConfirm(false);
     }
+  }
+
+  if (carregando) {
+    return (
+      <div className="listar-encarregados-page">
+        <p className="page-subtitle">A carregar encarregados do sistema...</p>
+      </div>
+    );
   }
 
   return (
@@ -109,6 +141,8 @@ export default function ListarEncarregados() {
         </Link>
       </div>
 
+      {erroGeral && <div className="alert alert-danger">{erroGeral}</div>}
+
       {/* Filtros e Busca */}
       <div className="filtros-bar">
         <div className="busca-box">
@@ -116,7 +150,7 @@ export default function ListarEncarregados() {
           <input
             type="text"
             className="input-busca"
-            placeholder="Buscar por nome, email, telefone ou matrícula..."
+            placeholder="Buscar por nome, email, telefone ou ID..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
@@ -147,11 +181,6 @@ export default function ListarEncarregados() {
               ? "Tente ajustar os filtros ou a busca"
               : "Crie o primeiro encarregado para começar"}
           </p>
-          {!busca && (
-            <Link to="/admin/encarregados/criar" className="btn btn-primary">
-              Criar Encarregado
-            </Link>
-          )}
         </div>
       )}
 
@@ -165,7 +194,6 @@ export default function ListarEncarregados() {
                   <th>Nome</th>
                   <th>Email</th>
                   <th>Telefone</th>
-                  <th>Matrícula</th>
                   <th>Alunos Associados</th>
                   <th>Ações</th>
                 </tr>
@@ -178,35 +206,25 @@ export default function ListarEncarregados() {
                   >
                     <td className="cell-nome">
                       <div className="encarregado-avatar">
-                        {enc.user?.nome.charAt(0).toUpperCase()}
+                        {enc.user?.nome?.charAt(0).toUpperCase() || "E"}
                       </div>
                       <div className="encarregado-info">
-                        <div className="encarregado-nome">{enc.user?.nome}</div>
-                        <div className="encarregado-id">{enc.matricula}</div>
+                        <div className="encarregado-nome">{enc.user?.nome || "Sem Nome"}</div>
+                        <div className="encarregado-id">ID: {enc.id}</div>
                       </div>
                     </td>
                     <td className="cell-email">
-                      <a href={`mailto:${enc.user?.email}`}>{enc.user?.email}</a>
+                      <a href={`mailto:${enc.user?.email}`}>{enc.user?.email || "—"}</a>
                     </td>
                     <td className="cell-telefone">
                       <div className="telefone-info">
-                        <div className="telefone-principal">
-                          <Phone size={14} /> {enc.telefone}
-                        </div>
-                        {enc.telefonePrincipal && (
-                          <div className="telefone-secundario">
-                            {enc.telefonePrincipal}
-                          </div>
-                        )}
+                        <Phone size={14} /> {enc.telefone || "—"}
                       </div>
-                    </td>
-                    <td className="cell-matricula">
-                      <span className="matricula-badge">{enc.matricula}</span>
                     </td>
                     <td className="cell-alunos">
                       <span className="alunos-badge">
                         <Users size={14} />
-                        {enc.estudantes?.length || 0} aluno{(enc.estudantes?.length || 0) === 1 ? "" : "s"}
+                        {enc.students?.length || 0} aluno{(enc.students?.length || 0) === 1 ? "" : "s"}
                       </span>
                     </td>
                     <td className="cell-acoes">
@@ -228,7 +246,7 @@ export default function ListarEncarregados() {
                         <button
                           className="btn-icon btn-icon-delete"
                           title="Deletar"
-                          onClick={() => deletarEncarregado(enc.id, enc.user_id)}
+                          onClick={() => deletarEncarregado(enc.id)}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -256,7 +274,7 @@ export default function ListarEncarregados() {
               <div className="detalhes-content">
                 {/* Avatar Grande */}
                 <div className="detalhes-avatar">
-                  {encarregadoSelecionado.user?.nome.charAt(0).toUpperCase()}
+                  {encarregadoSelecionado.user?.nome?.charAt(0).toUpperCase() || "E"}
                 </div>
 
                 {/* Informações Pessoais */}
@@ -269,6 +287,10 @@ export default function ListarEncarregados() {
                   <div className="detalhes-item">
                     <span className="label">ID de Usuário</span>
                     <span className="value">{encarregadoSelecionado.user_id}</span>
+                  </div>
+                  <div className="detalhes-item">
+                    <span className="label">ID Encarregado</span>
+                    <span className="value">#{encarregadoSelecionado.id}</span>
                   </div>
                 </div>
 
@@ -283,37 +305,41 @@ export default function ListarEncarregados() {
                   </div>
                   <div className="detalhes-item">
                     <Phone size={14} />
-                    <div className="telefone-detalhes">
-                      <div>{encarregadoSelecionado.telefone}</div>
-                      {encarregadoSelecionado.telefonePrincipal && (
-                        <div className="telefone-secundario">
-                          {encarregadoSelecionado.telefonePrincipal}
-                        </div>
-                      )}
-                    </div>
+                    <span>{encarregadoSelecionado.telefone || "—"}</span>
                   </div>
                 </div>
 
-                {/* Informações Profissionais */}
+                {/* Status */}
                 <div className="detalhes-section">
-                  <h4>Informações Administrativas</h4>
+                  <h4>Status</h4>
                   <div className="detalhes-item">
-                    <span className="label">Matrícula</span>
-                    <span className="value">{encarregadoSelecionado.matricula}</span>
+                    <span className="label">Ativo</span>
+                    <span
+                      className={`status-badge ${
+                        encarregadoSelecionado.ativo ? "ativo" : "inativo"
+                      }`}
+                    >
+                      {encarregadoSelecionado.ativo ? "Sim" : "Não"}
+                    </span>
                   </div>
                 </div>
 
                 {/* Alunos Associados */}
                 <div className="detalhes-section">
-                  <h4>Alunos Associados ({encarregadoSelecionado.estudantes?.length || 0})</h4>
-                  {encarregadoSelecionado.estudantes?.length > 0 ? (
+                  <h4>
+                    Alunos Associados ({encarregadoSelecionado.students?.length || 0})
+                  </h4>
+                  {encarregadoSelecionado.students?.length > 0 ? (
                     <div className="alunos-lista">
-                      {encarregadoSelecionado.estudantes.map((alunoId) => (
-                        <div key={alunoId} className="aluno-item">
+                      {encarregadoSelecionado.students.map((aluno) => (
+                        <div key={aluno.id} className="aluno-item">
                           <div className="aluno-avatar-small">
-                            {obterNomeAluno(alunoId).charAt(0).toUpperCase()}
+                            {aluno.user?.nome?.charAt(0).toUpperCase()}
                           </div>
-                          <span>{obterNomeAluno(alunoId)}</span>
+                          <div className="aluno-info">
+                            <span className="aluno-nome">{aluno.user?.nome}</span>
+                            <span className="aluno-matricula">{aluno.matricula}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -333,13 +359,7 @@ export default function ListarEncarregados() {
                   </Link>
                   <button
                     className="btn btn-outline btn-block btn-danger"
-                    onClick={() => {
-                      deletarEncarregado(
-                        encarregadoSelecionado.id,
-                        encarregadoSelecionado.user_id
-                      );
-                      setEncarregadoSelecionado(null);
-                    }}
+                    onClick={() => deletarEncarregado(encarregadoSelecionado.id)}
                   >
                     <Trash2 size={16} />
                     Deletar
@@ -358,12 +378,15 @@ export default function ListarEncarregados() {
             <h3>Confirmar Eliminação</h3>
             <p>
               Tem certeza que deseja eliminar este encarregado? Esta ação não pode ser
-              desfeita.
+              desfeita e apagará o registro no servidor.
             </p>
             <div className="modal-actions">
               <button
                 className="btn btn-outline"
-                onClick={() => setShowConfirm(false)}
+                onClick={() => {
+                  setShowConfirm(false);
+                  setEncarregadoParaDeletar(null);
+                }}
               >
                 Cancelar
               </button>

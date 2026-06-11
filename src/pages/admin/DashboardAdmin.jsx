@@ -1,22 +1,18 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { UserSquare2, Users, GraduationCap, School,Clock, ArrowRight } from 'lucide-react';
+import { UserSquare2, Users, GraduationCap, School, Clock, ArrowRight, Loader } from 'lucide-react';
+import api from '../../services/api';
 import StatCard from '../../components/layout/StatCard.jsx'
-import {
-  professoresStore,
-  encarregadosStore,
-  alunosStore,
-  turmasStore,
-} from '../../utils/adminMockData.js';
 import '../../styles/DashboardAdmin.css';
 
 
 export default function DashboardAdmin() {
-  const professores = professoresStore.list();
-  const encarregados = encarregadosStore.list();
-  const alunos = alunosStore.list();
-  const turmas = turmasStore.list();
-  
-  const semTurma = alunos.filter((a) => !a.turmaId).length;
+  const [professores, setProfessores] = useState([]);
+  const [encarregados, setEncarregados] = useState([]);
+  const [alunos, setAlunos] = useState([]);
+  const [turmas, setTurmas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
 
   const atalhos = [
     { label: "Listar Alunos", to: "/admin/alunos", icon: GraduationCap },
@@ -26,6 +22,53 @@ export default function DashboardAdmin() {
     { label: "Listar Horários", to: "/admin/horarios", icon: Clock },
   ];
 
+  // Buscar todos os dados necessários
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    setCarregando(true);
+    setErro("");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Buscar todos os dados em paralelo
+      const [profRes, encRes, aluRes, turRes] = await Promise.all([
+        api.get("/teachers", { headers }),
+        api.get("/guardians", { headers }),
+        api.get("/students", { headers }),
+        api.get("/classes", { headers }),
+      ]);
+
+      setProfessores(profRes.data || []);
+      setEncarregados(encRes.data || []);
+      setAlunos(aluRes.data || []);
+      setTurmas(turRes.data || []);
+    } catch (error) {
+      const msg = error.response?.data?.error || "Erro ao carregar dados do painel.";
+      setErro(msg);
+      console.error("Erro ao carregar dados:", error);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  // Calcular alunos sem turma
+  const semTurma = alunos.filter((a) => !a.class_id).length;
+
+  if (carregando) {
+    return (
+      <div className="dashboard-admin">
+        <div className="loading-state">
+          <Loader size={48} className="spinner" />
+          <p>A carregar painel de administração...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard-admin">
       <div className="page-header">
@@ -34,6 +77,8 @@ export default function DashboardAdmin() {
           Visão geral dos utilizadores e turmas da escola.
         </p>
       </div>
+
+      {erro && <div className="alert alert-danger">{erro}</div>}
 
       <div className="grid grid-4">
         <StatCard
@@ -61,7 +106,7 @@ export default function DashboardAdmin() {
           icon={School}
           label="Turmas"
           value={turmas.length}
-          hint="Ano letivo 2024/2025"
+          hint="Total de turmas ativas"
           tone="success"
         />
       </div>
@@ -81,19 +126,28 @@ export default function DashboardAdmin() {
           </div>
 
           <div className="turmas-list">
-            {turmas.map((t) => (
-              <div key={t.id} className="turma-item">
-                <div>
-                  <div className="turma-nome">{t.nome}</div>
-                  <div className="turma-meta">
-                    Sala {t.sala} · {t.anoLetivo}
+            {turmas.length > 0 ? (
+              turmas.map((t) => {
+                const totalAlunos = t.students?.length || 0;
+                return (
+                  <div key={t.id} className="turma-item">
+                    <div>
+                      <div className="turma-nome">{t.nome}</div>
+                      <div className="turma-meta">
+                        {t.ano_letivo}
+                      </div>
+                    </div>
+                    <span className="badge badge-primary">
+                      {totalAlunos} aluno{totalAlunos === 1 ? "" : "s"}
+                    </span>
                   </div>
-                </div>
-                <span className="badge badge-primary">
-                  {t.alunos.length} aluno{t.alunos.length === 1 ? "" : "s"}
-                </span>
+                );
+              })
+            ) : (
+              <div className="empty-state-small">
+                <p>Nenhuma turma registada</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
 

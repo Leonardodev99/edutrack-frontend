@@ -1,15 +1,36 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { GraduationCap, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+import api from "../services/api.js";
 import "../styles/ForgetPassword.css";
 
 export default function ForgetPassword() {
   const [email, setEmail] = useState("");
   const [enviado, setEnviado] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    setEnviado(true);
+    setErro("");
+    setCarregando(true);
+
+    try {
+      await api.post("/passwords/forgot", { email });
+      setEnviado(true);
+    } catch (error) {
+      const mensagem =
+        error.response?.data?.error ||
+        "Erro ao enviar o link. Tente novamente.";
+      setErro(mensagem);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  function handleTentarNovamente() {
+    setEnviado(false);
+    setErro("");
   }
 
   return (
@@ -59,12 +80,19 @@ export default function ForgetPassword() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
+                    disabled={carregando}
                   />
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-hero btn-block">
-                Enviar link de recuperação
+              {erro && <div className="alert alert-danger">{erro}</div>}
+
+              <button
+                type="submit"
+                className="btn btn-hero btn-block"
+                disabled={carregando}
+              >
+                {carregando ? "A enviar..." : "Enviar link de recuperação"}
               </button>
 
               <div className="forget-foot">
@@ -90,7 +118,7 @@ export default function ForgetPassword() {
                 <button
                   type="button"
                   className="forget-resend"
-                  onClick={() => setEnviado(false)}
+                  onClick={handleTentarNovamente}
                 >
                   Tentar novamente
                 </button>

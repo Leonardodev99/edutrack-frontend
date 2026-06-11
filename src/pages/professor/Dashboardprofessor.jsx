@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ClipboardList,
@@ -15,41 +15,10 @@ import {
   CalendarDays,
   ArrowRight,
 } from "lucide-react";
+import api from "../../services/api";
 import "../../styles/Dashboardprofessor.css";
 
-// ── Mock data ──────────────────────────────────────────────
-const PROFESSOR = { id: 1, nome: "Prof. Ana Sousa", disciplina: "Matemática" };
-
-const ATTENDANCES = [
-  { id: 1, student_id: 10, schedule_id: 3, teacher_id: 1, data_aula: "2025-05-20", presente: true,  observacao: ""                  },
-  { id: 2, student_id: 11, schedule_id: 3, teacher_id: 1, data_aula: "2025-05-20", presente: false, observacao: "Faltou sem justificação" },
-  { id: 3, student_id: 12, schedule_id: 3, teacher_id: 1, data_aula: "2025-05-20", presente: true,  observacao: ""                  },
-  { id: 4, student_id: 10, schedule_id: 3, teacher_id: 1, data_aula: "2025-05-21", presente: true,  observacao: ""                  },
-  { id: 5, student_id: 11, schedule_id: 3, teacher_id: 1, data_aula: "2025-05-21", presente: true,  observacao: ""                  },
-  { id: 6, student_id: 13, schedule_id: 4, teacher_id: 1, data_aula: "2025-05-22", presente: false, observacao: "Doença"            },
-];
-
-const TASKS = [
-  { id: 1, title: "Exercícios de Álgebra",    description: "Capítulo 3, pág. 45–50", deadline: "2025-05-28", teacher_id: 1 },
-  { id: 2, title: "Teste de Geometria",        description: "Matéria do 2.º trimestre", deadline: "2025-06-02", teacher_id: 1 },
-  { id: 3, title: "Trabalho de Grupo – Stats", description: "Estatística descritiva",  deadline: "2025-06-10", teacher_id: 1 },
-];
-
-const SUBMISSIONS = [
-  { id: 1,  task_id: 1, student_id: 10, content: "Resolução completa", file_url: null,          feedback: "Muito bom!",       status: "corrigido"  },
-  { id: 2,  task_id: 1, student_id: 11, content: "Resolução parcial",  file_url: null,          feedback: "",                 status: "pendente"   },
-  { id: 3,  task_id: 1, student_id: 12, content: "Resolução completa", file_url: "file.pdf",    feedback: "Correto",          status: "corrigido"  },
-  { id: 4,  task_id: 2, student_id: 10, content: "Teste respondido",   file_url: null,          feedback: "",                 status: "pendente"   },
-  { id: 5,  task_id: 2, student_id: 13, content: "Teste respondido",   file_url: null,          feedback: "",                 status: "pendente"   },
-  { id: 6,  task_id: 3, student_id: 11, content: "Trabalho entregue",  file_url: "trabalho.pdf",feedback: "Aguarda revisão",  status: "pendente"   },
-];
-
-const GRADES = [
-  { id: 1, submission_id: 1, teacher_id: 1, grade: 18, feedback: "Excelente trabalho" },
-  { id: 2, submission_id: 3, teacher_id: 1, grade: 15, feedback: "Bom desempenho"     },
-];
-
-// ── Helpers ─────────────────────────────────────────────────
+// Helpers mantidos para formatação e regras de prazo
 function formatDate(iso) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
@@ -63,43 +32,103 @@ function daysUntil(iso) {
 
 function taskStatus(deadline) {
   const d = daysUntil(deadline);
-  if (d < 0)  return { label: "Expirada",  tone: "danger"  };
-  if (d <= 3) return { label: `${d}d`,     tone: "warning" };
-  return           { label: `${d}d`,       tone: "ok"      };
+  if (d < 0) return { label: "Expirada", tone: "danger" };
+  if (d <= 3) return { label: `${d}d`, tone: "warning" };
+  return { label: `${d}d`, tone: "ok" };
 }
 
-// ── Component ────────────────────────────────────────────────
 export default function DashboardProfessor() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("visao");
 
-  const totalPresencas   = ATTENDANCES.filter((a) => a.presente).length;
-  const totalFaltas      = ATTENDANCES.filter((a) => !a.presente).length;
-  const taxaPresenca     = Math.round((totalPresencas / ATTENDANCES.length) * 100);
-  const submPendentes    = SUBMISSIONS.filter((s) => s.status === "pendente");
-  const submCorrigidas   = SUBMISSIONS.filter((s) => s.status === "corrigido");
-  const semNota          = submCorrigidas.filter(
-    (s) => !GRADES.find((g) => g.submission_id === s.id)
-  );
-  const mediaNotas =
-    GRADES.length
-      ? (GRADES.reduce((acc, g) => acc + g.grade, 0) / GRADES.length).toFixed(1)
-      : "—";
+  // Estados dos dados carregados do backend
+  const [attendances, setAttendances] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [pendingSubmissions, setPendingSubmissions] = useState([]);
+  const [grades, setGrades] = useState([]);
 
-  // Presença agrupada por data
-  const presencaPorData = ATTENDANCES.reduce((acc, a) => {
-    acc[a.data_aula] = acc[a.data_aula] || { presentes: 0, faltas: 0 };
-    a.presente ? acc[a.data_aula].presentes++ : acc[a.data_aula].faltas++;
-    return acc;
-  }, {});
+  // Estados de controle da interface
+  const [carregando, setCarregando] = useState(true);
+  const [erroGeral, setErroGeral] = useState("");
+
+  // O ID e Nome do professor podem ser extraídos dinamicamente do Token se preferir, 
+  // aqui mantemos uma referência local baseada no fluxo do EduTrack.
+  const [professor] = useState({ nome: "Professor", disciplina: "EduTrack" });
+
+  useEffect(() => {
+    async function carregarDadosDashboard() {
+      try {
+        setCarregando(true);
+        const token = localStorage.getItem("@EduTrack:token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Carregamento simultâneo de todos os dados protegidos do backend
+        const [
+          attendancesRes,
+          tasksRes,
+          submissionsRes,
+          pendingRes,
+          gradesRes
+        ] = await Promise.all([
+          api.get("/attendances", { headers }).catch(() => ({ data: [] })),
+          api.get("/tasks", { headers }).catch(() => ({ data: [] })),
+          api.get("/submissions", { headers }).catch(() => ({ data: [] })),
+          api.get("/submissions/pending", { headers }).catch(() => ({ data: [] })),
+          api.get("/grades", { headers }).catch(() => ({ data: [] }))
+        ]);
+
+        setAttendances(attendancesRes.data);
+        setTasks(tasksRes.data);
+        setSubmissions(submissionsRes.data);
+        setPendingSubmissions(pendingRes.data);
+        setGrades(gradesRes.data);
+      } catch (error) {
+        console.error("Erro ao processar dados do dashboard:", error);
+        setErroGeral("Houve um problema ao carregar as informações do servidor.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    carregarDadosDashboard();
+  }, []);
+
+  // ── Cálculos Dinâmicos baseados no Backend (Memos) ───────────────────────
+  const totalPresencas = useMemo(() => attendances.filter((a) => a.presente).length, [attendances]);
+  const totalFaltas = useMemo(() => attendances.filter((a) => !a.presente).length, [attendances]);
+  
+  const taxaPresenca = useMemo(() => {
+    return attendances.length ? Math.round((totalPresencas / attendances.length) * 100) : 0;
+  }, [attendances, totalPresencas]);
+
+  const mediaNotas = useMemo(() => {
+    if (!grades.length) return "—";
+    // Mapeia tanto para 'score' quanto para 'grade' caso varie no backend
+    const soma = grades.reduce((acc, g) => acc + Number(g.score || g.grade || 0), 0);
+    return (soma / grades.length).toFixed(1);
+  }, [grades]);
+
+  // Agrupamento de chamadas de presença por data
+  const presencaPorData = useMemo(() => {
+    return attendances.reduce((acc, a) => {
+      const dataChave = a.data_aula || (a.createdAt ? a.createdAt.split("T")[0] : "Sem Data");
+      acc[dataChave] = acc[dataChave] || { presentes: 0, faltas: 0 };
+      a.presente ? acc[dataChave].presentes++ : acc[dataChave].faltas++;
+      return acc;
+    }, {});
+  }, [attendances]);
 
   const TABS = [
-    { id: "visao",      label: "Visão Geral"  },
-    { id: "presencas",  label: "Presenças"    },
-    { id: "tarefas",    label: "Tarefas"      },
-    { id: "submissoes", label: "Submissões"   },
-    { id: "notas",      label: "Notas"        },
+    { id: "visao", label: "Visão Geral" },
+    { id: "presencas", label: "Presenças" },
+    { id: "tarefas", label: "Tarefas" },
+    { id: "submissoes", label: "Submissões" },
+    { id: "notas", label: "Notas" },
   ];
+
+  if (carregando) return <div className="loading">Carregando painel de controle...</div>;
+  if (erroGeral) return <div className="alert alert-danger">{erroGeral}</div>;
 
   return (
     <div className="dash-prof">
@@ -107,8 +136,8 @@ export default function DashboardProfessor() {
       <div className="dash-header">
         <div className="dash-header-text">
           <p className="dash-greeting">Bem-vindo de volta,</p>
-          <h1 className="dash-title">{PROFESSOR.nome}</h1>
-          <p className="dash-sub">{PROFESSOR.disciplina} · Ano letivo 2024/2025</p>
+          <h1 className="dash-title">{professor.nome}</h1>
+          <p className="dash-sub">{professor.disciplina} · Gestão Escolar</p>
         </div>
         <div className="dash-header-date">
           <CalendarDays size={16} />
@@ -135,10 +164,10 @@ export default function DashboardProfessor() {
         {activeTab === "visao" && (
           <>
             <div className="stat-grid">
-              <StatCard icon={Users}        label="Taxa de Presença" value={`${taxaPresenca}%`} hint={`${totalFaltas} falta${totalFaltas !== 1 ? "s" : ""} registada${totalFaltas !== 1 ? "s" : ""}`} tone="primary" />
-              <StatCard icon={BookOpen}     label="Tarefas Ativas"  value={TASKS.length}        hint="Este período"                    tone="ok"      />
-              <StatCard icon={ClipboardList}label="Submissões"       value={SUBMISSIONS.length}  hint={`${submPendentes.length} pendente${submPendentes.length !== 1 ? "s" : ""}`} tone="warning" />
-              <StatCard icon={Star}         label="Média das Notas"  value={mediaNotas}          hint={`${GRADES.length} nota${GRADES.length !== 1 ? "s" : ""} atribuída${GRADES.length !== 1 ? "s" : ""}`} tone="success" />
+              <StatCard icon={Users} label="Taxa de Presença" value={`${taxaPresenca}%`} hint={`${totalFaltas} faltas registadas`} tone="primary" />
+              <StatCard icon={BookOpen} label="Tarefas Ativas" value={tasks.length} hint="Total publicado" tone="ok" />
+              <StatCard icon={ClipboardList} label="Submissões" value={submissions.length} hint={`${pendingSubmissions.length} pendentes`} tone="warning" />
+              <StatCard icon={Star} label="Média das Notas" value={mediaNotas} hint={`${grades.length} atribuídas`} tone="success" />
             </div>
 
             <div className="dash-two-col">
@@ -151,25 +180,29 @@ export default function DashboardProfessor() {
                   </button>
                 </div>
                 <div className="panel-list">
-                  {TASKS.slice(0, 3).map((t) => {
-                    const s = taskStatus(t.deadline);
-                    return (
-                      <div key={t.id} className="task-row">
-                        <div className="task-row-left">
-                          <div className={`deadline-dot dot-${s.tone}`} />
-                          <div>
-                            <div className="task-row-title">{t.title}</div>
-                            <div className="task-row-meta">{formatDate(t.deadline)}</div>
+                  {tasks.length === 0 ? (
+                    <div className="panel-empty-text">Nenhuma tarefa cadastrada.</div>
+                  ) : (
+                    tasks.slice(0, 3).map((t) => {
+                      const s = taskStatus(t.deadline);
+                      return (
+                        <div key={t.id} className="task-row">
+                          <div className="task-row-left">
+                            <div className={`deadline-dot dot-${s.tone}`} />
+                            <div>
+                              <div className="task-row-title">{t.title}</div>
+                              <div className="task-row-meta">{formatDate(t.deadline)}</div>
+                            </div>
                           </div>
+                          <span className={`badge-deadline badge-${s.tone}`}>{s.label}</span>
                         </div>
-                        <span className={`badge-deadline badge-${s.tone}`}>{s.label}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* Submissões pendentes */}
+              {/* Submissões pendentes usando /submissions/pending */}
               <div className="panel">
                 <div className="panel-head">
                   <span className="panel-title">Para Corrigir</span>
@@ -177,20 +210,20 @@ export default function DashboardProfessor() {
                     Ver todas <ArrowRight size={14} />
                   </button>
                 </div>
-                {submPendentes.length === 0 ? (
+                {pendingSubmissions.length === 0 ? (
                   <div className="panel-empty">
                     <CheckCircle2 size={28} />
                     <span>Tudo em dia!</span>
                   </div>
                 ) : (
                   <div className="panel-list">
-                    {submPendentes.slice(0, 4).map((s) => {
-                      const task = TASKS.find((t) => t.id === s.task_id);
+                    {pendingSubmissions.slice(0, 4).map((s) => {
+                      const currentTask = tasks.find((t) => t.id === s.task_id);
                       return (
                         <div key={s.id} className="subm-row">
                           <Circle size={8} className="subm-dot" />
                           <div>
-                            <div className="subm-row-title">{task?.title || "Tarefa"}</div>
+                            <div className="subm-row-title">{currentTask?.title || `Tarefa #${s.task_id}`}</div>
                             <div className="subm-row-meta">Aluno #{s.student_id}</div>
                           </div>
                           <span className="badge-status badge-pendente">Pendente</span>
@@ -216,34 +249,38 @@ export default function DashboardProfessor() {
             </div>
 
             <div className="presenca-by-date">
-              {Object.entries(presencaPorData)
-                .sort(([a], [b]) => b.localeCompare(a))
-                .map(([data, counts]) => (
-                  <div key={data} className="presenca-date-group">
-                    <div className="presenca-date-label">
-                      <CalendarDays size={14} />
-                      {formatDate(data)}
-                    </div>
-                    <div className="presenca-rows">
-                      {ATTENDANCES.filter((a) => a.data_aula === data).map((a) => (
-                        <div key={a.id} className={`presenca-row ${a.presente ? "row-presente" : "row-falta"}`}>
-                          <div className="presenca-row-left">
-                            {a.presente
-                              ? <CheckCircle2 size={16} className="icon-ok" />
-                              : <AlertCircle  size={16} className="icon-danger" />}
-                            <span>Aluno #{a.student_id}</span>
+              {Object.entries(presencaPorData).length === 0 ? (
+                <div className="panel-empty-text">Sem registo de faltas ou presenças nesta turma.</div>
+              ) : (
+                Object.entries(presencaPorData)
+                  .sort(([a], [b]) => b.localeCompare(a))
+                  .map(([data, counts]) => (
+                    <div key={data} className="presenca-date-group">
+                      <div className="presenca-date-label">
+                        <CalendarDays size={14} />
+                        {formatDate(data)}
+                      </div>
+                      <div className="presenca-rows">
+                        {attendances.filter((a) => (a.data_aula || a.createdAt?.split("T")[0]) === data).map((a) => (
+                          <div key={a.id} className={`presenca-row ${a.presente ? "row-presente" : "row-falta"}`}>
+                            <div className="presenca-row-left">
+                              {a.presente
+                                ? <CheckCircle2 size={16} className="icon-ok" />
+                                : <AlertCircle size={16} className="icon-danger" />}
+                              <span>Aluno #{a.student_id}</span>
+                            </div>
+                            <div className="presenca-row-right">
+                              {a.observacao && <span className="presenca-obs">{a.observacao}</span>}
+                              <span className={`badge-status ${a.presente ? "badge-ok" : "badge-danger"}`}>
+                                {a.presente ? "Presente" : "Falta"}
+                              </span>
+                            </div>
                           </div>
-                          <div className="presenca-row-right">
-                            {a.observacao && <span className="presenca-obs">{a.observacao}</span>}
-                            <span className={`badge-status ${a.presente ? "badge-ok" : "badge-danger"}`}>
-                              {a.presente ? "Presente" : "Falta"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+              )}
             </div>
 
             <button className="btn-add" onClick={() => navigate("/professor/presencas/registar")}>
@@ -262,37 +299,41 @@ export default function DashboardProfessor() {
               </button>
             </div>
             <div className="tasks-list">
-              {TASKS.map((t) => {
-                const s     = taskStatus(t.deadline);
-                const subs  = SUBMISSIONS.filter((s) => s.task_id === t.id);
-                const pend  = subs.filter((s) => s.status === "pendente").length;
-                return (
-                  <div key={t.id} className="task-card">
-                    <div className="task-card-head">
-                      <div>
-                        <div className="task-card-title">{t.title}</div>
-                        <div className="task-card-desc">{t.description}</div>
-                      </div>
-                      <span className={`badge-deadline badge-${s.tone}`}>
-                        <Clock size={12} /> {formatDate(t.deadline)}
-                      </span>
-                    </div>
-                    <div className="task-card-foot">
-                      <span className="task-meta-item">
-                        <FileCheck size={13} /> {subs.length} submissão{subs.length !== 1 ? "ões" : ""}
-                      </span>
-                      {pend > 0 && (
-                        <span className="task-meta-item task-meta-warn">
-                          <AlertCircle size={13} /> {pend} por corrigir
+              {tasks.length === 0 ? (
+                <div className="panel-empty-text">Nenhuma tarefa publicada.</div>
+              ) : (
+                tasks.map((t) => {
+                  const s = taskStatus(t.deadline);
+                  const subs = submissions.filter((sub) => sub.task_id === t.id);
+                  const pend = pendingSubmissions.filter((sub) => sub.task_id === t.id).length;
+                  return (
+                    <div key={t.id} className="task-card">
+                      <div className="task-card-head">
+                        <div>
+                          <div className="task-card-title">{t.title}</div>
+                          <div className="task-card-desc">{t.description}</div>
+                        </div>
+                        <span className={`badge-deadline badge-${s.tone}`}>
+                          <Clock size={12} /> {formatDate(t.deadline)}
                         </span>
-                      )}
-                      <button className="task-card-btn" onClick={() => navigate(`/professor/tarefas/${t.id}`)}>
-                        Ver detalhes <ChevronRight size={14} />
-                      </button>
+                      </div>
+                      <div className="task-card-foot">
+                        <span className="task-meta-item">
+                          <FileCheck size={13} /> {subs.length} submissões
+                        </span>
+                        {pend > 0 && (
+                          <span className="task-meta-item task-meta-warn">
+                            <AlertCircle size={13} /> {pend} por corrigir
+                          </span>
+                        )}
+                        <button className="task-card-btn" onClick={() => navigate(`/professor/tarefas/${t.id}`)}>
+                          Ver detalhes <ChevronRight size={14} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -303,8 +344,8 @@ export default function DashboardProfessor() {
             <div className="panel-head">
               <span className="panel-title">Submissões</span>
               <div className="subm-chips">
-                <span className="presenca-chip chip-warning">{submPendentes.length} pendentes</span>
-                <span className="presenca-chip chip-ok">{submCorrigidas.length} corrigidas</span>
+                <span className="presenca-chip chip-warning">{pendingSubmissions.length} pendentes</span>
+                <span className="presenca-chip chip-ok">{submissions.length - pendingSubmissions.length} corrigidas</span>
               </div>
             </div>
 
@@ -321,27 +362,36 @@ export default function DashboardProfessor() {
                   </tr>
                 </thead>
                 <tbody>
-                  {SUBMISSIONS.map((s) => {
-                    const task = TASKS.find((t) => t.id === s.task_id);
-                    return (
-                      <tr key={s.id}>
-                        <td className="td-bold">{task?.title || "—"}</td>
-                        <td>Aluno #{s.student_id}</td>
-                        <td className="td-content">{s.content}</td>
-                        <td>
-                          {s.file_url
-                            ? <a href="#" className="file-link">📎 {s.file_url}</a>
-                            : <span className="td-muted">—</span>}
-                        </td>
-                        <td>
-                          <span className={`badge-status badge-${s.status === "pendente" ? "pendente" : "ok"}`}>
-                            {s.status === "pendente" ? "Pendente" : "Corrigido"}
-                          </span>
-                        </td>
-                        <td className="td-muted">{s.feedback || "—"}</td>
-                      </tr>
-                    );
-                  })}
+                  {submissions.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="td-muted" style={{ textAlign: "center" }}>Nenhuma entrega efetuada ainda.</td>
+                    </tr>
+                  ) : (
+                    submissions.map((s) => {
+                      const currentTask = tasks.find((t) => t.id === s.task_id);
+                      const isPending = pendingSubmissions.some((p) => p.id === s.id);
+                      return (
+                        <tr key={s.id}>
+                          <td className="td-bold">{currentTask?.title || `Tarefa #${s.task_id}`}</td>
+                          <td>Aluno #{s.student_id}</td>
+                          <td className="td-content">{s.content || "—"}</td>
+                          <td>
+                            {s.file_url ? (
+                              <a href={s.file_url} target="_blank" rel="noreferrer" className="file-link">📎 Abrir Ficheiro</a>
+                            ) : (
+                              <span className="td-muted">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`badge-status badge-${isPending ? "pendente" : "ok"}`}>
+                              {isPending ? "Pendente" : "Corrigido"}
+                            </span>
+                          </td>
+                          <td className="td-muted">{s.feedback || "—"}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -355,27 +405,32 @@ export default function DashboardProfessor() {
             <div className="panel">
               <div className="panel-head">
                 <span className="panel-title">Notas Atribuídas</span>
-                <span className="panel-count">{GRADES.length}</span>
+                <span className="panel-count">{grades.length}</span>
               </div>
               <div className="grades-list">
-                {GRADES.map((g) => {
-                  const sub  = SUBMISSIONS.find((s) => s.id === g.submission_id);
-                  const task = TASKS.find((t) => t.id === sub?.task_id);
-                  return (
-                    <div key={g.id} className="grade-row">
-                      <div className="grade-row-left">
-                        <div className={`grade-badge ${g.grade >= 10 ? "grade-ok" : "grade-fail"}`}>
-                          {g.grade}
+                {grades.length === 0 ? (
+                  <div className="panel-empty-text">Nenhuma nota emitida.</div>
+                ) : (
+                  grades.map((g) => {
+                    const sub = submissions.find((s) => s.id === g.submission_id);
+                    const task = tasks.find((t) => t.id === sub?.task_id);
+                    const notaExibida = g.score || g.grade || 0;
+                    return (
+                      <div key={g.id} className="grade-row">
+                        <div className="grade-row-left">
+                          <div className={`grade-badge ${notaExibida >= 10 ? "grade-ok" : "grade-fail"}`}>
+                            {notaExibida}
+                          </div>
+                          <div>
+                            <div className="grade-task">{task?.title || "Tarefa Eliminada"}</div>
+                            <div className="grade-student">Aluno #{sub?.student_id || g.student_id}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="grade-task">{task?.title || "—"}</div>
-                          <div className="grade-student">Aluno #{sub?.student_id}</div>
-                        </div>
+                        <div className="grade-feedback">{g.feedback || "Sem observações descritivas."}</div>
                       </div>
-                      <div className="grade-feedback">{g.feedback}</div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
               <div className="media-bar">
                 <TrendingUp size={15} />
@@ -383,27 +438,27 @@ export default function DashboardProfessor() {
               </div>
             </div>
 
-            {/* Submissões sem nota */}
+            {/* Submissões sem nota (Aproveitando a lista pendente) */}
             <div className="panel">
               <div className="panel-head">
-                <span className="panel-title">Sem Nota</span>
-                <span className="panel-count panel-count-warn">{submPendentes.length}</span>
+                <span className="panel-title">Aguardando Avaliação</span>
+                <span className="panel-count panel-count-warn">{pendingSubmissions.length}</span>
               </div>
-              {submPendentes.length === 0 ? (
+              {pendingSubmissions.length === 0 ? (
                 <div className="panel-empty">
                   <CheckCircle2 size={28} />
                   <span>Todas avaliadas!</span>
                 </div>
               ) : (
                 <div className="grades-list">
-                  {submPendentes.map((s) => {
-                    const task = TASKS.find((t) => t.id === s.task_id);
+                  {pendingSubmissions.map((s) => {
+                    const task = tasks.find((t) => t.id === s.task_id);
                     return (
                       <div key={s.id} className="grade-row">
                         <div className="grade-row-left">
                           <div className="grade-badge grade-empty">—</div>
                           <div>
-                            <div className="grade-task">{task?.title || "—"}</div>
+                            <div className="grade-task">{task?.title || `Tarefa #${s.task_id}`}</div>
                             <div className="grade-student">Aluno #{s.student_id}</div>
                           </div>
                         </div>
