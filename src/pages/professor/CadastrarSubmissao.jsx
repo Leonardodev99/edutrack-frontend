@@ -134,7 +134,7 @@ export default function CadastrarSubmissao() {
 
       setSucesso(true);
       setTimeout(() => {
-        navigate("/professor/submissoes"); // ajuste a rota
+        navigate("/professor"); 
       }, 1600);
     } catch (error) {
       console.error(error);
