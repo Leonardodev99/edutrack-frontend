@@ -11,7 +11,7 @@ import '../../styles/AdminSidebar.css';
 
 const links = [
   { to: "/professor",               label: "Dashboard",    icon: LayoutDashboard, end: true },
-  { to: "/professor/presencas",     label: "Presenças",    icon: ClipboardList },
+  { to: "/professor/presencas/marcar",     label: "Presenças",    icon: ClipboardList },
   { to: "/professor/tarefas/criar",       label: "Tarefas",      icon: BookOpen },
   { to: "/professor/submissoes/criar",    label: "Submissões",   icon: FileCheck },
   { to: "/professor/notas/lancar",         label: "Notas",        icon: Star },

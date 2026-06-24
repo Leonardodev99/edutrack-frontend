@@ -80,7 +80,7 @@ export default function CadastrarTarefa() {
 
       setSucesso(true);
       setTimeout(() => {
-        navigate("/professor/tarefas"); // ajuste conforme sua rota
+        navigate("/professor/tarefas"); 
       }, 1600);
     } catch (error) {
       console.error(error);

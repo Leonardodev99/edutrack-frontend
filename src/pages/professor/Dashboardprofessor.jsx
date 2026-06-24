@@ -283,7 +283,7 @@ export default function DashboardProfessor() {
               )}
             </div>
 
-            <button className="btn-add" onClick={() => navigate("/professor/presencas/registar")}>
+            <button className="btn-add" onClick={() => navigate("/professor/presencas/marcar")}>
               + Registar Presença
             </button>
           </div>

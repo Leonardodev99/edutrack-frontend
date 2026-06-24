@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/Topbar.css';
 
 export default function ProfessorTopbar() {
-  const usuarioAtual = "Prof. Ana Sousa";
+  const usuarioAtual = "";
   const navigate = useNavigate();
 
   const handleLogout = () => {

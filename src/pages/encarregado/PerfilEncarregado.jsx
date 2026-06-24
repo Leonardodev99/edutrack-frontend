@@ -1,38 +1,128 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Mail, Phone, Shield, Lock, Save, GraduationCap, MapPin } from 'lucide-react';
+import api from '../../services/api';
 import '../../styles/PerfilEncarregado.css';
 
 export default function PerfilEncarregado() {
-  // Estados para gerenciar as informações editáveis do formulário
-  const [nome, setNome] = useState("Carlos Silva");
-  const [email, setEmail] = useState("carlos.silva@email.com");
-  const [telefone, setTelefone] = useState("+244 923 000 000");
-  const [morada, setMorada] = useState("Centralidade do Kilamba, Bloco X, Luanda");
+  // IDs de controle de banco de dados
+  const [userId, setUserId] = useState(null);
+  const [guardianId, setGuardianId] = useState(null);
 
-  // Estado para alteração de senha de segurança
+  // Estados dos inputs de dados cadastrais
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [morada, setMorada] = useState("Luanda, Angola"); 
+
+  // Estados de segurança
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
 
-  // Dados estáticos do educando vinculado (Lucas Silva)
-  const educandosVinculados = [
-    { id: "e-200", nome: "Lucas Silva", turma: "Turma A - Alpha", curso: "Junior Game Development" }
-  ];
+  // Lista dinâmica de educandos tutelados
+  const [educandosVinculados, setEducandosVinculados] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [mensagem, setMensagem] = useState({ tipo: "", texto: "" });
 
-  const handleSalvarPerfil = (e) => {
-    e.preventDefault();
-    alert("Alterações cadastrais salvas com sucesso!");
+  useEffect(() => {
+    async function carregarDadosCompletos() {
+      try {
+        setCarregando(true);
+        const token = localStorage.getItem("@EduTrack:token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // 1. Coleta dados essenciais do usuário autenticado
+        const responseUser = await api.get("/users/me", { headers });
+        const dadosUser = responseUser.data;
+        
+        setUserId(dadosUser.id);
+        setNome(dadosUser.nome);
+        setEmail(dadosUser.email);
+
+        // Substitua a lógica antiga no useEffect por esta:
+const responseGuardian = await api.get("/guardians/me", { headers });
+const meuPerfilGuardian = responseGuardian.data;
+
+if (meuPerfilGuardian) {
+  setGuardianId(meuPerfilGuardian.id);
+  setTelefone(meuPerfilGuardian.telefone || "");
+  
+  if (meuPerfilGuardian.students) {
+    const alunosFormatados = meuPerfilGuardian.students.map(estudante => ({
+      id: estudante.id,
+      nome: estudante.user?.nome || "Estudante",
+      turma: "Turma Ativa",
+      curso: estudante.matricula ? `Matrícula: ${estudante.matricula}` : "Curso Regular"
+    }));
+    setEducandosVinculados(alunosFormatados);
+  }
+}
+      } catch (error) {
+        console.error("Erro ao sincronizar dados com o servidor:", error);
+        exibirMensagem("danger", "Não foi possível resgatar seus dados cadastrais.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    carregarDadosCompletos();
+  }, []);
+
+  const exibirMensagem = (tipo, texto) => {
+    setMensagem({ tipo, texto });
+    setTimeout(() => setMensagem({ tipo: "", texto: "" }), 5000);
   };
 
-  const handleAlterarSenha = (e) => {
+  const handleSalvarPerfil = async (e) => {
     e.preventDefault();
-    if (!senhaAtual || !novaSenha) {
-      alert("Por favor, preencha os campos de senha.");
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Como o controller exige papel de gestor para alterar certos dados de terceiros,
+      // no escopo de perfil próprio o encarregado atualiza sua estrutura base e telefone.
+      await api.put(`/users/${userId}`, { nome, email }, { headers });
+      
+      if (guardianId) {
+        await api.put(`/guardians/${guardianId}`, { telefone }, { headers });
+      }
+
+      exibirMensagem("success", "Alterações cadastrais aplicadas com sucesso!");
+    } catch (error) {
+      exibirMensagem("danger", error.response?.data?.error || "Erro ao tentar atualizar cadastro.");
+    }
+  };
+
+  const handleAlterarSenha = async (e) => {
+    e.preventDefault();
+    if (!novaSenha || novaSenha.length < 6) {
+      exibirMensagem("danger", "A nova senha precisa conter no mínimo 6 caracteres.");
       return;
     }
-    alert("Senha de segurança atualizada com sucesso!");
-    setSenhaAtual("");
-    setNovaSenha("");
+
+    try {
+      const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Envia a nova senha para a rota de atualização do usuário
+      await api.put(`/users/${userId}`, { senha: novaSenha }, { headers });
+
+      exibirMensagem("success", "Sua palavra-passe de acesso foi modificada com êxito!");
+      setSenhaAtual("");
+      setNovaSenha("");
+    } catch (error) {
+      exibirMensagem("danger", "Houve um problema de autenticação ao tentar alterar a senha.");
+    }
   };
+
+  if (carregando) {
+    return (
+      <div className="perfil-page">
+        <div style={{ padding: "40px", textAlign: "center", color: "#666" }}>
+          Sincronizando dados com o sistema central da escola...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="perfil-page">
@@ -42,6 +132,12 @@ export default function PerfilEncarregado() {
           <p className="page-subtitle">Gerencie suas informações de contato, senhas de acesso e consulte os educandos vinculados à sua conta.</p>
         </div>
       </div>
+
+      {mensagem.texto && (
+        <div className={`alert alert-${mensagem.tipo}`} style={{ margin: "15px 0", padding: "12px", borderRadius: "6px" }}>
+          {mensagem.texto}
+        </div>
+      )}
 
       <div className="perfil-layout-grid">
         {/* Coluna da Esquerda: Formulários de Edição e Segurança */}
@@ -176,21 +272,25 @@ export default function PerfilEncarregado() {
               <GraduationCap size={18} className="text-success" />
               <h2>Educandos Sob Tutela</h2>
             </div>
-            <p className="sidebar-section-desc">Estes são os estudantes vinculados ao seu Número de Identificação Fiscal (NIF) para acompanhamento pedagógico.</p>
+            <p className="sidebar-section-desc">Estes são os estudantes vinculados ao seu registro familiar para acompanhamento pedagógico na instituição.</p>
 
             <div className="students-tutela-list">
-              {educandosVinculados.map((aluno) => (
-                <div key={aluno.id} className="student-tutela-item-box">
-                  <div className="student-avatar-placeholder">
-                    <span>{aluno.nome.charAt(0)}</span>
+              {educandosVinculados.length === 0 ? (
+                <p style={{ color: "#888", fontSize: "13px" }}>Nenhum educando vinculado a este perfil.</p>
+              ) : (
+                educandosVinculados.map((aluno) => (
+                  <div key={aluno.id} className="student-tutela-item-box">
+                    <div className="student-avatar-placeholder">
+                      <span>{aluno.nome.charAt(0)}</span>
+                    </div>
+                    <div className="student-tutela-details">
+                      <h4>{aluno.nome}</h4>
+                      <span className="student-info-badge">{aluno.curso}</span>
+                      <p className="student-sub-detail">{aluno.turma}</p>
+                    </div>
                   </div>
-                  <div className="student-tutela-details">
-                    <h4>{aluno.nome}</h4>
-                    <span className="student-info-badge">{aluno.curso}</span>
-                    <p className="student-sub-detail">{aluno.turma}</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

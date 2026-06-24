@@ -1,53 +1,177 @@
-import { useState, useMemo } from 'react';
-import { FileSpreadsheet, Download, BookOpen, AlertCircle, CheckCircle, Award } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { FileSpreadsheet, Download, BookOpen, AlertCircle, CheckCircle, Award, Loader2 } from 'lucide-react';
+import api from '../../services/api'; // Instância do Axios configurada
 import '../../styles/BoletimTrimestral.css';
+import html2pdf from 'html2pdf.js';
 
 export default function BoletimTrimestral() {
-  // Estado para controlar o trimestre selecionado
   const [trimestreAtivo, setTrimestreAtivo] = useState(1);
+  const [notasApi, setNotasApi] = useState([]);
+  const [studentId, setStudentId] = useState(null); // Armazena o ID para o download
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false); // Estado de loading para o PDF
+  const [erro, setErro] = useState(null);
 
-  // Mock estruturado das notas do educando (Lucas Silva) por trimestre
-  const dadosBoletim = {
-    1: [
-      { id: "b1-1", disciplina: "Junior Game Development", mac: 16.5, prova: 15.0, projeto: 18.0, media: 16.5, resultado: "Aprovado" },
-      { id: "b1-2", disciplina: "Digital Sciences", mac: 14.0, prova: 13.5, projeto: 16.0, media: 14.5, resultado: "Aprovado" },
-    ],
-    2: [
-      { id: "b2-1", disciplina: "Junior Game Development", mac: 17.0, prova: 16.5, projeto: 19.0, media: 17.5, resultado: "Aprovado" },
-      { id: "b2-2", disciplina: "Digital Sciences", mac: 12.5, prova: 11.0, projeto: 14.0, media: 12.5, resultado: "Aprovado" },
-    ],
-    3: [
-      { id: "b3-1", disciplina: "Junior Game Development", mac: 18.0, prova: 17.0, projeto: 19.5, media: 18.2, resultado: "Aprovado" },
-      { id: "b3-2", disciplina: "Digital Sciences", mac: 15.0, prova: 14.0, projeto: 17.0, media: 15.3, resultado: "Aprovado" },
-    ]
-  };
+  useEffect(() => {
+    async function carregarDadosBoletim() {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("@EduTrack:token");
+        const headers = { Authorization: `Bearer ${token}` };
 
-  // Calcula a média global ponderada do trimestre selecionado
+        // 1. Buscamos o perfil do encarregado para descobrir o ID do educando vinculado
+        const responseGuardian = await api.get("/guardians/me", { headers });
+        const meuPerfilGuardian = responseGuardian.data;
+
+        if (!meuPerfilGuardian || !meuPerfilGuardian.students || meuPerfilGuardian.students.length === 0) {
+          setErro("Nenhum educando vinculado a este encarregado.");
+          setLoading(false);
+          return;
+        }
+
+        // Captura o ID do primeiro estudante vinculado
+        const idEstudante = meuPerfilGuardian.students[0].id;
+        setStudentId(idEstudante);
+
+        // 2. Busca as notas reais do estudante no backend avançado
+        const responseGrades = await api.get(`/students/${idEstudante}/grades`, { headers });
+        
+        // Se a API retornar a propriedade .data dentro do corpo envelopado
+        if (responseGrades.data && responseGrades.data.data) {
+          setNotasApi(responseGrades.data.data);
+        } else if (Array.isArray(responseGrades.data)) {
+          setNotasApi(responseGrades.data);
+        } else {
+          setNotasApi([]);
+        }
+        
+        setErro(null);
+      } catch (err) {
+        console.error("Erro ao buscar boletim:", err);
+        setErro("Não foi possível carregar os dados de avaliação do educando.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    carregarDadosBoletim();
+  }, []);
+
+  // Mapeia e distribui dinamicamente os dados vindos da API para o formato esperado pela tabela
+  const dadosBoletimProcessados = useMemo(() => {
+    const estrutura = { 1: [], 2: [], 3: [] };
+
+    if (!Array.isArray(notasApi) || notasApi.length === 0) return estrutura;
+
+    notasApi.forEach((item) => {
+      if (!item) return;
+      const disciplinaNome = item.teacher?.disciplina || item.schedule?.disciplina || "Educação Tecnológica";
+      const trimestreDaTask = item.submission?.task?.trimestre || item.trimestre || 1; 
+
+      let linhaDisciplina = estrutura[trimestreDaTask].find(d => d.disciplina === disciplinaNome);
+
+      if (!linhaDisciplina) {
+        linhaDisciplina = {
+          id: `grade-${item.id}`,
+          disciplina: disciplinaNome,
+          mac: 0,
+          prova: 0,
+          projeto: 0,
+          contador: 0,
+          somaNotas: 0
+        };
+        estrutura[trimestreDaTask].push(linhaDisciplina);
+      }
+
+      const tipoTask = (item.submission?.task?.title || item.tipoAvaliacao || '').toLowerCase();
+      const notaValor = Number(item.score || item.valor || 0);
+
+      if (tipoTask.includes('prova') || tipoTask.includes('exame')) {
+        linhaDisciplina.prova = notaValor;
+      } else if (tipoTask.includes('projeto') || tipoTask.includes('prático')) {
+        linhaDisciplina.projeto = notaValor;
+      } else {
+        linhaDisciplina.mac = linhaDisciplina.mac === 0 ? notaValor : (linhaDisciplina.mac + notaValor) / 2;
+      }
+
+      linhaDisciplina.contador += 1;
+      linhaDisciplina.somaNotas += notaValor;
+      linhaDisciplina.media = linhaDisciplina.somaNotas / linhaDisciplina.contador;
+      linhaDisciplina.resultado = linhaDisciplina.media >= 10 ? "Aprovado" : "Abaixo da Média";
+    });
+
+    return estrutura;
+  }, [notasApi]);
+
+  const notasExibidas = useMemo(() => {
+    return dadosBoletimProcessados[trimestreAtivo] || [];
+  }, [dadosBoletimProcessados, trimestreAtivo]);
+
   const mediaGlobalTrimestre = useMemo(() => {
-    const notasFlat = dadosBoletim[trimestreAtivo] || [];
-    if (notasFlat.length === 0) return "0.0";
-    const soma = notasFlat.reduce((acc, curr) => acc + curr.media, 0);
-    return (soma / notasFlat.length).toFixed(1);
-  }, [trimestreAtivo]);
+    if (notasExibidas.length === 0) return "0.0";
+    const soma = notasExibidas.reduce((acc, curr) => acc + curr.media, 0);
+    return (soma / notasExibidas.length).toFixed(1);
+  }, [notasExibidas]);
 
-  // Função simulada para download do boletim em PDF
+
+  // 📥 FUNÇÃO QUE FAZ O DOWNLOAD DO PDF REAL DO BACKEND
   const handleImprimirBoletim = () => {
-    alert(`Preparando download do arquivo PDF: Boletim_Trimestre_${trimestreAtivo}_Lucas_Silva.pdf`);
+  const elemento = document.querySelector(".boletim-table-wrapper"); // Seleciona a tabela
+  
+  const opcoes = {
+    margin:       10,
+    filename:     `Boletim_${trimestreAtivo}_Trimestre.pdf`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2 },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' } // Landscape fica melhor para tabelas
   };
 
-  const notasExibidas = dadosBoletim[trimestreAtivo] || [];
+  setExporting(true);
+  
+  html2pdf().set(opcoes).from(elemento).save()
+    .then(() => setExporting(false))
+    .catch(() => setExporting(false));
+};
+
+  if (loading) {
+    return (
+      <div className="boletim-loading-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '1rem' }}>
+        <Loader2 className="animate-spin" size={40} color="#0066cc" />
+        <p style={{ color: '#666' }}>Buscando registros no EduTrack...</p>
+      </div>
+    );
+  }
+
+  if (erro) {
+    return (
+      <div className="boletim-error-container" style={{ padding: '2rem', textAlign: 'center', background: '#fff5f5', borderRadius: '8px', border: '1px solid #ffcccc', margin: '2rem' }}>
+        <AlertCircle size={36} color="#cc0000" style={{ margin: '0 auto 1rem' }} />
+        <h3 style={{ color: '#cc0000', marginBottom: '0.5rem' }}>Aviso de Sistema</h3>
+        <p style={{ color: '#555' }}>{erro}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="boletim-page">
-      {/* Cabeçalho da Página */}
+      {/* Cabeçalho */}
       <div className="page-header-boletim">
         <div>
           <h1 className="page-title">Boletim de Notas Trimestral</h1>
           <p className="page-subtitle">Consulte o rendimento detalhado, notas de provas e médias por período.</p>
         </div>
-        <button className="btn-export-pdf" onClick={handleImprimirBoletim}>
-          <Download size={16} />
-          <span>Baixar Boletim Oficial</span>
+        <button 
+          className="btn-export-pdf" 
+          onClick={handleImprimirBoletim} 
+          disabled={notasExibidas.length === 0 || exporting}
+          style={{ gap: '0.5rem', display: 'flex', alignItems: 'center' }}
+        >
+          {exporting ? (
+            <Loader2 className="animate-spin" size={16} />
+          ) : (
+            <Download size={16} />
+          )}
+          <span>{exporting ? 'A carregar PDF...' : 'Baixar Boletim Oficial'}</span>
         </button>
       </div>
 
@@ -65,7 +189,7 @@ export default function BoletimTrimestral() {
         ))}
       </div>
 
-      {/* Painel de Destaque da Média Periódica */}
+      {/* Painel de Destaque */}
       <div className="trimestre-insights-banner">
         <div className="insight-content-block">
           <Award size={24} className="insight-icon" />
@@ -79,7 +203,7 @@ export default function BoletimTrimestral() {
         </div>
         <div className="insight-status-badge">
           <CheckCircle size={16} />
-          <span>Situação: Regularizado</span>
+          <span>Situação: {Number(mediaGlobalTrimestre) >= 10 ? 'Aprovado' : 'Atenção Requerida'}</span>
         </div>
       </div>
 
@@ -97,38 +221,46 @@ export default function BoletimTrimestral() {
             </tr>
           </thead>
           <tbody>
-            {notasExibidas.map((nota) => {
-              const estaAbaixoDaMedia = nota.media < 10;
-              
-              return (
-                <tr key={nota.id} className={estaAbaixoDaMedia ? 'row-grade-danger' : ''}>
-                  <td className="font-semibold">
-                    <div className="discipline-cell">
-                      <BookOpen size={14} />
-                      <span>{nota.disciplina}</span>
-                    </div>
-                  </td>
-                  <td className="text-center font-medium text-muted">{nota.mac.toFixed(1)}</td>
-                  <td className="text-center font-medium text-muted">{nota.prova.toFixed(1)}</td>
-                  <td className="text-center font-medium text-muted">{nota.projeto.toFixed(1)}</td>
-                  <td className="text-center">
-                    <span className={`final-grade-badge ${estaAbaixoDaMedia ? 'low-grade' : 'good-grade'}`}>
-                      {nota.media.toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="text-center">
-                    <span className={`result-status-badge ${estaAbaixoDaMedia ? 'status-danger' : 'status-success'}`}>
-                      {estaAbaixoDaMedia ? 'Abaixo da Média' : nota.resultado}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
+            {notasExibidas.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center" style={{ padding: '2rem', color: '#888' }}>
+                  Nenhuma avaliação registrada para o {trimestreAtivo}º trimestre.
+                </td>
+              </tr>
+            ) : (
+              notasExibidas.map((nota) => {
+                const estaAbaixoDaMedia = nota.media < 10;
+                
+                return (
+                  <tr key={nota.id} className={estaAbaixoDaMedia ? 'row-grade-danger' : ''}>
+                    <td className="font-semibold">
+                      <div className="discipline-cell">
+                        <BookOpen size={14} />
+                        <span>{nota.disciplina}</span>
+                      </div>
+                    </td>
+                    <td className="text-center font-medium text-muted">{nota.mac.toFixed(1)}</td>
+                    <td className="text-center font-medium text-muted">{nota.prova.toFixed(1)}</td>
+                    <td className="text-center font-medium text-muted">{nota.projeto.toFixed(1)}</td>
+                    <td className="text-center">
+                      <span className={`final-grade-badge ${estaAbaixoDaMedia ? 'low-grade' : 'good-grade'}`}>
+                        {nota.media.toFixed(1)}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <span className={`result-status-badge ${estaAbaixoDaMedia ? 'status-danger' : 'status-success'}`}>
+                        {nota.resultado}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Legenda de Critérios */}
+      {/* Legenda */}
       <div className="boletim-footer-legend">
         <div className="legend-title">
           <AlertCircle size={14} />

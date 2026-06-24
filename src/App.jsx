@@ -26,6 +26,8 @@ import CadastrarTarefa from './pages/professor/CadastrarTarefa.jsx';
 import CadastrarSubmissao from './pages/professor/CadastrarSubmissao.jsx';
 import LancarNota from './pages/professor/LancarNota.jsx';
 import MarcarPresenca from './pages/professor/MarcarPresenca.jsx';
+import ListarPresenca from './pages/professor/ListarPresenca.jsx';
+import ListarTarefas from './pages/professor/ListarTarefas.jsx'
 import PerfilProfessor from './pages/professor/PerfilProfessor.jsx';
 
 
@@ -73,9 +75,11 @@ function App() {
           <Route index element={<DashboardProfessor />} />
           <Route path="perfil" element={<PerfilProfessor />} />
           <Route path="/professor/tarefas/criar" element={<CadastrarTarefa />} />
+          <Route path="/professor/tarefas/:id" element={<CadastrarTarefa />} />
           <Route path="/professor/submissoes/criar" element={<CadastrarSubmissao />} />
           <Route path="/professor/notas/lancar" element={<LancarNota />} />
-          <Route path="presencas" element={<MarcarPresenca />} />
+          <Route path="/professor/presencas/marcar" element={<MarcarPresenca />} />
+          <Route path="presencas" element={<ListarPresenca />} />
           
         </Route>
 

@@ -11,7 +11,7 @@ import {
   Mail,
   BookOpen,
 } from "lucide-react";
-import api from "../../services/api"; // Importa a sua instância do Axios
+import api from "../../services/api"; 
 import "../../styles/ListarProfessores.css";
 
 export default function ListarProfessores() {

@@ -119,8 +119,6 @@ export default function CriarProfessor() {
 
   function voltar() {
     if (etapa === 2) {
-      // Opcional: Se o usuário voltar, idealmente a conta já foi criada, 
-      // mas podemos permitir que ele avance reajustando os dados profissionais.
       setEtapa(1);
     } else {
       navigate("/admin/professores");
