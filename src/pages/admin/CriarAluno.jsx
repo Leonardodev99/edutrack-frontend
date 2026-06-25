@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import api from "../../services/api.js";
 import "../../styles/CriarAluno.css";
@@ -11,6 +11,9 @@ function gerarMatricula() {
 
 export default function CriarAluno() {
   const navigate = useNavigate();
+  const { id } = useParams(); // Captura o ID da URL se estiver em modo de edição
+  const isEdit = Boolean(id); // Flag que define se estamos a editar ou a criar
+
   const [etapa, setEtapa] = useState(1); // 1: Usuário, 2: Perfil Aluno
 
   // Dados do Utilizador (Fase 1)
@@ -32,8 +35,49 @@ export default function CriarAluno() {
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
-  // ID do utilizador retornado após salvar a Etapa 1
+  // ID do utilizador associado ao aluno (gerado no POST ou vindo do GET na edição)
   const [createdUserId, setCreatedUserId] = useState(null);
+
+  // 1. CARREGAR DADOS SE FOR MODO DE EDIÇÃO
+  useEffect(() => {
+    async function carregarDadosAluno() {
+      if (!isEdit) return;
+
+      setCarregando(true);
+      try {
+        const token = localStorage.getItem("@EduTrack:token");
+        const response = await api.get(`/students/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const aluno = response.data;
+
+        // Preenche os dados do Utilizador base
+        setUserData({
+          nome: aluno.user?.nome || "",
+          email: aluno.user?.email || "",
+          senha: "", // Deixamos em branco na edição por segurança
+          confirmarSenha: "",
+        });
+
+        // Preenche os dados Académicos
+        setAlunoData({
+          matricula: aluno.matricula || "",
+          curso: aluno.curso || "Ensino Secundário",
+          ano_ingresso: aluno.ano_ingresso || new Date().getFullYear(),
+        });
+
+        setCreatedUserId(aluno.user_id);
+      } catch (error) {
+        const msg = error.response?.data?.error || "Erro ao carregar dados antigos do aluno.";
+        setErros({ geral: msg });
+      } finally {
+        setCarregando(false);
+      }
+    }
+
+    carregarDadosAluno();
+  }, [id, isEdit]);
 
   // Validação Local da Etapa 1
   function validarEtapa1() {
@@ -51,14 +95,26 @@ export default function CriarAluno() {
       novosErros.email = "Email inválido";
     }
 
-    if (!userData.senha) {
-      novosErros.senha = "Senha é obrigatória";
-    } else if (userData.senha.length < 6) {
-      novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
-    }
+    // Regra de validação de senha condicional para Edição vs Criação
+    if (!isEdit) {
+      if (!userData.senha) {
+        novosErros.senha = "Senha é obrigatória";
+      } else if (userData.senha.length < 6) {
+        novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
+      }
 
-    if (userData.senha !== userData.confirmarSenha) {
-      novosErros.confirmarSenha = "As senhas não correspondem";
+      if (userData.senha !== userData.confirmarSenha) {
+        novosErros.confirmarSenha = "As senhas não correspondem";
+      }
+    } else if (userData.senha) {
+      // Se for edição, a senha é opcional, mas se digitada deve ter 6 caracteres
+      if (userData.senha.length < 6) {
+        novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
+      }
+
+      if (userData.senha !== userData.confirmarSenha) {
+        novosErros.confirmarSenha = "As senhas não correspondem";
+      }
     }
 
     setErros(novosErros);
@@ -85,7 +141,7 @@ export default function CriarAluno() {
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar para a Etapa 2 realizando o primeiro insert na BD (/users)
+  // Avançar para a Etapa 2 salvando ou atualizando a tabela de /users
   async function avancar() {
     if (!validarEtapa1()) return;
 
@@ -93,21 +149,35 @@ export default function CriarAluno() {
     setErros({});
 
     try {
-      const response = await api.post("/users", {
-        nome: userData.nome,
-        email: userData.email,
-        senha: userData.senha,
-        tipo: "aluno", // Forçamos o tipo para aluno nesta tela
-      });
+      const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
 
-      // Guardamos o ID do utilizador recém-criado
-      setCreatedUserId(response.data.id);
-      setEtapa(2);
+      if (isEdit) {
+        // Modo Edição: Atualiza o Utilizador existente
+        await api.put(`/users/${createdUserId}`, {
+          nome: userData.nome,
+          email: userData.email,
+          ...(userData.senha ? { senha: userData.senha } : {}), // Só envia a senha se foi modificada
+        }, { headers });
+
+        setEtapa(2);
+      } else {
+        // Modo Criação: Insere um novo Utilizador
+        const response = await api.post("/users", {
+          nome: userData.nome,
+          email: userData.email,
+          senha: userData.senha,
+          tipo: "aluno",
+        });
+
+        setCreatedUserId(response.data.id);
+        setEtapa(2);
+      }
     } catch (error) {
       if (error.response && error.response.data && error.response.data.error) {
         setErros({ email: error.response.data.error });
       } else {
-        setErros({ geral: "Erro ao validar utilizador no servidor." });
+        setErros({ geral: "Erro ao salvar dados do utilizador no servidor." });
       }
     } finally {
       setCarregando(false);
@@ -137,13 +207,23 @@ export default function CriarAluno() {
     setErros({});
 
     try {
-      // Enviamos os dados para a tabela de alunos associando o user_id obtido na etapa 1
-      await api.post("/students", {
+      const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const payload = {
         user_id: createdUserId,
         matricula: alunoData.matricula,
         curso: alunoData.curso,
         ano_ingresso: alunoData.ano_ingresso,
-      });
+      };
+
+      if (isEdit) {
+        // Modo Edição: Atualiza os dados académicos do aluno
+        await api.put(`/students/${id}`, payload, { headers });
+      } else {
+        // Modo Criação: Cria o registo do aluno vinculado ao user_id
+        await api.post("/students", payload);
+      }
 
       setSucesso(true);
       setTimeout(() => {
@@ -167,7 +247,7 @@ export default function CriarAluno() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="page-title">Criar Aluno</h1>
+          <h1 className="page-title">{isEdit ? "Editar Aluno" : "Criar Aluno"}</h1>
           <p className="page-subtitle">
             {etapa === 1
               ? "Passo 1 de 2: Dados de Acesso"
@@ -198,7 +278,7 @@ export default function CriarAluno() {
           {/* Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
-              ✓ Aluno registado com sucesso na Base de Dados! Redirecionando...
+              ✓ {isEdit ? "Registo atualizado com sucesso!" : "Aluno registado com sucesso!"} Redirecionando...
             </div>
           )}
 
@@ -207,7 +287,7 @@ export default function CriarAluno() {
             <>
               <div className="form-section">
                 <h2>Dados de Acesso</h2>
-                <p className="section-desc">Crie a conta base para o sistema de autenticação</p>
+                <p className="section-desc">Gerencie as credenciais da conta no sistema</p>
               </div>
 
               <div className="form-group">
@@ -227,6 +307,7 @@ export default function CriarAluno() {
                 <label className="label">Email *</label>
                 <input
                   type="email"
+                  autoComplete="new-email" // Bloqueia preenchimento automático de contas salvas
                   className={`input ${erros.email ? "is-invalid" : ""}`}
                   placeholder="joao.silva@edutrack.pt"
                   value={userData.email}
@@ -238,9 +319,12 @@ export default function CriarAluno() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label className="label">Senha *</label>
+                  <label className="label">
+                    {isEdit ? "Nova Senha (deixe em branco para manter)" : "Senha *"}
+                  </label>
                   <input
                     type="password"
+                    autoComplete="new-password" // Impede que o navegador jogue a senha do admin logado
                     className={`input ${erros.senha ? "is-invalid" : ""}`}
                     placeholder="••••••••"
                     value={userData.senha}
@@ -254,6 +338,7 @@ export default function CriarAluno() {
                   <label className="label">Confirmar Senha *</label>
                   <input
                     type="password"
+                    autoComplete="new-password"
                     className={`input ${erros.confirmarSenha ? "is-invalid" : ""}`}
                     placeholder="••••••••"
                     value={userData.confirmarSenha}
@@ -366,7 +451,7 @@ export default function CriarAluno() {
                 ) : (
                   <>
                     <Save size={18} />
-                    <span>Concluir Cadastro</span>
+                    <span>{isEdit ? "Salvar Alterações" : "Concluir Cadastro"}</span>
                   </>
                 )}
               </button>
