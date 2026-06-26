@@ -1,11 +1,14 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import api from "../../services/api.js";
 import "../../styles/CriarProfessor.css";
 
 export default function CriarProfessor() {
   const navigate = useNavigate();
+  const { id } = useParams(); // 📌 Captura o ID da URL se for uma edição (ex: /admin/professores/editar/:id)
+  const isEdit = Boolean(id); // 📌 Define se o modo atual é Edição ou Criação
+
   const [etapa, setEtapa] = useState(1); // 1: Usuário, 2: Perfil Professor
 
   // Dados do Utilizador (Fase 1)
@@ -18,16 +21,16 @@ export default function CriarProfessor() {
 
   // Dados do Professor (Fase 2)
   const [professorData, setProfessorData] = useState({
-    matricula: "", // Deixamos vazio para o gestor digitar ou ser gerado pelo backend
+    matricula: "",
     departamento: "Ciências Exatas",
-    disciplinas: [], // O teu backend espera uma string (ex: 'Matemática, Física') ou array dependendo da migração
+    disciplinas: [],
   });
 
   const [erros, setErros] = useState({});
   const [carregando, setCarregando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
-  // ID do utilizador retornado após salvar a Etapa 1
+  // ID do utilizador vinculado ao professor
   const [createdUserId, setCreatedUserId] = useState(null);
 
   const disciplinasDisponiveis = [
@@ -40,6 +43,53 @@ export default function CriarProfessor() {
     "Ciências Exatas", "Ciências Naturais", "Humanidades",
     "Linguagem", "Educação Física", "Artes",
   ];
+
+  // 📌 NOVO: Carregar dados anteriores caso seja uma Edição
+  useEffect(() => {
+    if (isEdit) {
+      async function carregarDadosProfessor() {
+        setCarregando(true);
+        try {
+          // Ajusta a rota de detalhe de acordo com a tua API (ex: /teachers/:id ou /professores/:id)
+          const response = await api.get(`/teachers/${id}`);
+          const professor = response.data;
+
+          if (professor) {
+            // Guarda o ID do User vinculado para a Etapa 2
+            setCreatedUserId(professor.user_id);
+
+            // Preenche os dados do Usuário (Etapa 1)
+            setUserData({
+              nome: professor.user?.nome || "",
+              email: professor.user?.email || "",
+              senha: "", // Mantém vazio por segurança na edição
+              confirmarSenha: "",
+            });
+
+            // Tratamento das disciplinas (caso venham como string separada por vírgulas)
+            let listaDisciplinas = [];
+            if (professor.disciplina) {
+              listaDisciplinas = professor.disciplina.split(", ").map(d => d.trim());
+            }
+
+            // Preenche os dados do Professor (Etapa 2)
+            setProfessorData({
+              matricula: professor.matricula || "",
+              departamento: professor.departamento || "Ciências Exatas",
+              disciplinas: listaDisciplinas,
+            });
+          }
+        } catch (error) {
+          console.error("Erro ao carregar dados do professor:", error);
+          setErros({ geral: "Erro ao carregar dados anteriores para edição." });
+        } finally {
+          setCarregando(false);
+        }
+      }
+
+      carregarDadosProfessor();
+    }
+  }, [id, isEdit]);
 
   // Validação Local da Etapa 1
   function validarEtapa1() {
@@ -57,14 +107,24 @@ export default function CriarProfessor() {
       novosErros.email = "Email inválido";
     }
 
-    if (!userData.senha) {
-      novosErros.senha = "Senha é obrigatória";
-    } else if (userData.senha.length < 6) {
-      novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
-    }
+    // 📌 Na Edição, a senha só é obrigatória se o gestor a preencher para alterar
+    if (!isEdit) {
+      if (!userData.senha) {
+        novosErros.senha = "Senha é obrigatória";
+      } else if (userData.senha.length < 6) {
+        novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
+      }
 
-    if (userData.senha !== userData.confirmarSenha) {
-      novosErros.confirmarSenha = "As senhas não correspondem";
+      if (userData.senha !== userData.confirmarSenha) {
+        novosErros.confirmarSenha = "As senhas não correspondem";
+      }
+    } else if (userData.senha) { // Se estiver editando e digitou algo na senha
+      if (userData.senha.length < 6) {
+        novosErros.senha = "Senha deve ter pelo menos 6 caracteres";
+      }
+      if (userData.senha !== userData.confirmarSenha) {
+        novosErros.confirmarSenha = "As senhas não correspondem";
+      }
     }
 
     setErros(novosErros);
@@ -87,7 +147,7 @@ export default function CriarProfessor() {
     return Object.keys(novosErros).length === 0;
   }
 
-  // Avançar para a Etapa 2 realizando o primeiro insert na BD
+  // Avançar para a Etapa 2 (Insert ou Update na tabela de utilizadores)
   async function avancar() {
     if (!validarEtapa1()) return;
 
@@ -95,22 +155,32 @@ export default function CriarProfessor() {
     setErros({});
 
     try {
-      // Executa o POST para a rota /users do teu UserController
-      const response = await api.post("/users", {
+      const payload = {
         nome: userData.nome,
         email: userData.email,
-        senha: userData.senha,
-        tipo: "professor", // Forçamos o tipo para professor nesta tela
-      });
+        tipo: "professor",
+      };
 
-      // Guardamos o ID gerado pelo banco de dados para usar na etapa seguinte
-      setCreatedUserId(response.data.id);
-      setEtapa(2);
+      // Só envia a senha se tiver sido preenchida (útil para criação ou alteração opcional na edição)
+      if (userData.senha) {
+        payload.senha = userData.senha;
+      }
+
+      if (isEdit) {
+        // 📌 Se for Edição, atualiza o utilizador existente
+        await api.put(`/users/${createdUserId}`, payload);
+        setEtapa(2);
+      } {
+        // Se for Criação, faz o fluxo normal de registrar novo
+        const response = await api.post("/users", payload);
+        setCreatedUserId(response.data.id);
+        setEtapa(2);
+      }
     } catch (error) {
       if (error.response && error.response.data && error.response.data.error) {
         setErros({ email: error.response.data.error });
       } else {
-        setErros({ geral: "Erro ao validar utilizador no servidor." });
+        setErros({ geral: "Erro ao processar utilizador no servidor." });
       }
     } finally {
       setCarregando(false);
@@ -149,14 +219,19 @@ export default function CriarProfessor() {
     setErros({});
 
     try {
-      // Como o teu Teacher Model espera a estrutura do TeacherController:
-      // O teu backend recebe: user_id, departamento, disciplina
-      await api.post("/teachers", {
+      const payloadTeacher = {
         user_id: createdUserId,
         departamento: professorData.departamento,
-        // Convertemos o array para string caso o teu campo 'disciplina' seja um VARCHAR simples na base de dados
         disciplina: professorData.disciplinas.join(", "), 
-      });
+      };
+
+      if (isEdit) {
+        // 📌 Se for Edição, envia o PUT para os dados do professor
+        await api.put(`/teachers/${id}`, payloadTeacher);
+      } else {
+        // Se for Criação, envia o POST normal
+        await api.post("/teachers", payloadTeacher);
+      }
 
       setSucesso(true);
       setTimeout(() => {
@@ -180,7 +255,7 @@ export default function CriarProfessor() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="page-title">Criar Professor</h1>
+          <h1 className="page-title">{isEdit ? "Editar Professor" : "Criar Professor"}</h1>
           <p className="page-subtitle">
             {etapa === 1
               ? "Passo 1 de 2: Dados de Acesso"
@@ -211,7 +286,7 @@ export default function CriarProfessor() {
           {/* Sucesso */}
           {sucesso && (
             <div className="alert alert-success">
-              ✓ Professor registado com sucesso na Base de Dados! Redirecionando...
+              ✓ Dados do professor guardados com sucesso! Redirecionando...
             </div>
           )}
 
@@ -220,7 +295,9 @@ export default function CriarProfessor() {
             <>
               <div className="form-section">
                 <h2>Dados de Acesso</h2>
-                <p className="section-desc">Crie a conta base para o sistema de autenticação</p>
+                <p className="section-desc">
+                  {isEdit ? "Atualize a conta de autenticação do professor" : "Crie a conta base para o sistema de autenticação"}
+                </p>
               </div>
 
               <div className="form-group">
@@ -251,7 +328,7 @@ export default function CriarProfessor() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label className="label">Senha *</label>
+                  <label className="label">Senha {isEdit && "(Deixe em branco para manter)"}</label>
                   <input
                     type="password"
                     className={`input ${erros.senha ? "is-invalid" : ""}`}
@@ -264,7 +341,7 @@ export default function CriarProfessor() {
                 </div>
 
                 <div className="form-group">
-                  <label className="label">Confirmar Senha *</label>
+                  <label className="label">Confirmar Senha</label>
                   <input
                     type="password"
                     className={`input ${erros.confirmarSenha ? "is-invalid" : ""}`}
@@ -371,12 +448,12 @@ export default function CriarProfessor() {
               >
                 {carregando ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Loader2 size={16} className="animate-spin" /> Salvando...
+                    <Loader2 size={16} className="animate-spin" /> Guardando...
                   </span>
                 ) : (
                   <>
                     <Save size={18} />
-                    <span>Concluir Cadastro</span>
+                    <span>{isEdit ? "Atualizar Registo" : "Concluir Cadastro"}</span>
                   </>
                 )}
               </button>

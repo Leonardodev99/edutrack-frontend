@@ -11,7 +11,8 @@ import {
   Users,
   BookOpen,
   Calendar,
-  UserPlus, // Adicionado o ícone para Matricular/Adicionar Aluno
+  UserPlus, 
+  UserCheck, // Ícone para Alocar/Adicionar Professor
 } from "lucide-react";
 import api from "../../services/api";
 import "../../styles/ListarTurmas.css";
@@ -43,7 +44,7 @@ export default function ListarTurmas() {
     try {
       const token = localStorage.getItem("@EduTrack:token");
       
-      // GET /classes - retorna todas as turmas com include de teacher e students
+      // GET /classes - retorna todas as turmas com include de teachers/teacher e students
       const response = await api.get("/classes", {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -155,6 +156,14 @@ export default function ListarTurmas() {
   }
 
   const { totalTurmas, totalAlunos, turmaCheia } = calcularEstatisticas();
+
+  // Função auxiliar para normalizar e obter a lista de professores da turma de forma segura
+  const obterProfessoresDaTurma = (turma) => {
+    if (!turma) return [];
+    if (Array.isArray(turma.teachers)) return turma.teachers;
+    if (turma.teacher) return [turma.teacher]; // Fallback caso o back envie objeto único
+    return [];
+  };
 
   if (carregando) {
     return (
@@ -287,7 +296,7 @@ export default function ListarTurmas() {
                   <th>Nome</th>
                   <th>Curso</th>
                   <th>Ano Letivo</th>
-                  <th>Professor</th>
+                  <th>Professores</th>
                   <th>Alunos</th>
                   <th>Ações</th>
                 </tr>
@@ -295,6 +304,9 @@ export default function ListarTurmas() {
               <tbody>
                 {turmasFiltradas.map((turma) => {
                   const quantidadeAlunos = turma.students?.length || 0;
+                  const listaProfessores = obterProfessoresDaTurma(turma);
+                  const quantidadeProfessores = listaProfessores.length;
+
                   const statusLotacao =
                     quantidadeAlunos >= 25
                       ? "cheio"
@@ -326,8 +338,16 @@ export default function ListarTurmas() {
                       </td>
                       <td className="cell-professor">
                         <div className="professor-info">
-                          <div className="professor-nome">
-                            {turma.teacher?.user?.nome || "—"}
+                          <div className="professor-nome" style={{ fontWeight: "500" }}>
+                            {quantidadeProfessores === 0 ? (
+                              <span className="text-muted">—</span>
+                            ) : quantidadeProfessores === 1 ? (
+                              listaProfessores[0].user?.nome || "Sem nome"
+                            ) : (
+                              <span className="badge badge-info" style={{ backgroundColor: "#4361ee", color: "#fff", padding: "4px 8px", borderRadius: "12px", fontSize: "12px" }}>
+                                {quantidadeProfessores} Professores
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -355,14 +375,24 @@ export default function ListarTurmas() {
                             <Edit2 size={16} />
                           </Link>
 
-                          {/* ÍCONE ADICIONADO: Matricular Aluno nesta Turma */}
+                          {/* Ícone: Matricular Aluno nesta Turma */}
                           <Link
                             to="/admin/matricular"
                             className="btn-icon btn-icon-add-student"
                             title="Matricular Aluno"
-                            state={{ turmaId: turma.id }} // Passa o ID se quiseres pré-selecionar no MatricularAluno
+                            state={{ turmaId: turma.id }}
                           >
                             <UserPlus size={16} color="#2ec4b6" />
+                          </Link>
+
+                          {/* ÍCONE ADICIONADO: Adicionar/Alocar Professor nesta Turma */}
+                          <Link
+                            to="/admin/alocar-professor"
+                            className="btn-icon btn-icon-add-teacher"
+                            title="Alocar Professor"
+                            state={{ turmaId: turma.id }}
+                          >
+                            <UserCheck size={16} color="#4361ee" />
                           </Link>
 
                           <button
@@ -426,24 +456,24 @@ export default function ListarTurmas() {
                   </div>
                 </div>
 
-                {/* Professor */}
+                {/* Seção Modificada de Professores */}
                 <div className="detalhes-section">
-                  <h4>Professor Responsável</h4>
-                  {turmaSelecionada.teacher ? (
-                    <>
-                      <div className="detalhes-item">
-                        <span className="label">Nome</span>
-                        <span className="value">
-                          {turmaSelecionada.teacher?.user?.nome || "—"}
-                        </span>
-                      </div>
-                      <div className="detalhes-item">
-                        <span className="label">Email</span>
-                        <span className="value">
-                          {turmaSelecionada.teacher?.user?.email || "—"}
-                        </span>
-                      </div>
-                    </>
+                  <h4>Professores Alocados ({obterProfessoresDaTurma(turmaSelecionada).length})</h4>
+                  {obterProfessoresDaTurma(turmaSelecionada).length > 0 ? (
+                    <div className="professores-lista" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+                      {obterProfessoresDaTurma(turmaSelecionada).map((prof, index) => (
+                        <div key={prof.id || index} className="professor-item-detalhe" style={{ padding: "8px", border: "1px solid #eef2f3", borderRadius: "6px", backgroundColor: "#f8f9fa" }}>
+                          <div className="detalhes-item" style={{ marginBottom: "4px" }}>
+                            <span className="label" style={{ fontSize: "12px" }}>Nome</span>
+                            <span className="value" style={{ fontWeight: "500" }}>{prof.user?.nome || "—"}</span>
+                          </div>
+                          <div className="detalhes-item">
+                            <span className="label" style={{ fontSize: "12px" }}>Email</span>
+                            <span className="value" style={{ fontSize: "13px" }}>{prof.user?.email || "—"}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <p className="text-muted">Nenhum professor designado</p>
                   )}
@@ -488,7 +518,7 @@ export default function ListarTurmas() {
 
                 {/* Botões de Ação */}
                 <div className="detalhes-actions">
-                  {/* Botão rápido extra para matricular diretamente a partir do menu lateral */}
+                  {/* Botão rápido para matricular aluno */}
                   <Link
                     to="/admin/matricular"
                     className="btn btn-secondary btn-block"
@@ -497,6 +527,17 @@ export default function ListarTurmas() {
                   >
                     <UserPlus size={16} />
                     Matricular Aluno
+                  </Link>
+
+                  {/* BOTÃO ADICIONADO: Alocar professor a partir do menu lateral de detalhes */}
+                  <Link
+                    to="/admin/alocar-professor"
+                    className="btn btn-secondary btn-block"
+                    state={{ turmaId: turmaSelecionada.id }}
+                    style={{ marginBottom: "8px", backgroundColor: "#4361ee", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                  >
+                    <UserCheck size={16} />
+                    Alocar Professor
                   </Link>
                   
                   <Link

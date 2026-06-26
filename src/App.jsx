@@ -16,6 +16,7 @@ import ListarEncarregados from './pages/admin/ListarEncarregados.jsx';
 import CriarTurma from './pages/admin/CriarTurma.jsx';
 import ListarTurmas from './pages/admin/ListarTurmas.jsx';
 import MatricularAluno from './pages/admin/MatricularAluno.jsx';
+import AdicionarProfessor from './pages/admin/AdicionarProfessor.jsx';
 import CriarHorario from './pages/admin/CriarHorario.jsx';
 import ListarHorarios from './pages/admin/ListarHorarios.jsx';
 import PerfilAdmin from './pages/admin/PerfilAdmin.jsx';
@@ -59,6 +60,7 @@ function App() {
           <Route path="/admin/professor/criar" element={<CriarProfessor />} />
           <Route path="/admin/professores" element={<ListarProfessores />} />
           <Route path="/admin/professores/editar/:id" element={<CriarProfessor />} />
+          <Route path="/admin/alocar-professor" element={<AdicionarProfessor />} />
           <Route path="/admin/encarregados/criar" element={<CriarEncarregado />} />
           <Route path="/admin/encarregados" element={<ListarEncarregados />} />
           <Route path="encarregados/editar/:id" element={<CriarEncarregado />} />

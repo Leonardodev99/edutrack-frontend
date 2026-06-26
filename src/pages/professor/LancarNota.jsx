@@ -137,7 +137,7 @@ export default function LancarNota() {
 
       setSucesso(true);
       setTimeout(() => {
-        navigate("/professor/notas"); 
+        navigate("/professor"); 
       }, 1600);
 
     } catch (error) {

@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save, Plus, List } from "lucide-react";
 import api from "../../services/api"; 
 import "../../styles/CriarTurma.css";
 
 export default function CriarTurma() {
   const navigate = useNavigate();
+  const { id } = useParams(); // 📌 Captura o ID da URL se for edição
+  const isEditing = Boolean(id); // 📌 Define se o modo atual é Edição
 
   // Dados da Turma ajustados para o Backend
   const [turmaData, setTurmaData] = useState({
@@ -40,31 +42,57 @@ export default function CriarTurma() {
         const headers = { Authorization: `Bearer ${token}` };
 
         // 1️⃣ Busca os professores reais cadastrados no sistema
-        // Ajuste a rota se no seu backend for diferente de '/teachers'
         const responseProfessores = await api.get("/teachers", { headers });
         setProfessoresDisponiveis(responseProfessores.data);
 
-        // 2️⃣ Opcional: Buscar cursos já cadastrados nas turmas existentes para alimentar o Select
+        // 2️⃣ Buscar cursos já cadastrados nas turmas existentes para alimentar o Select
         const responseTurmas = await api.get("/classes", { headers });
+        let cursosUnicosPadrao = ["Ensino Básico", "Ensino Secundário", "Cursos Profissionais"];
+        
         if (responseTurmas.data && responseTurmas.data.length > 0) {
           const cursosDoBanco = responseTurmas.data.map((t) => t.curso);
-          // Junta os padrões com os do banco tirando duplicados
-          const cursosUnicos = Array.from(
-            new Set([...cursosDisponiveis, ...cursosDoBanco])
+          cursosUnicosPadrao = Array.from(
+            new Set([...cursosUnicosPadrao, ...cursosDoBanco])
           ).filter(Boolean);
-          setCursosDisponiveis(cursosUnicos);
+          setCursosDisponiveis(cursosUnicosPadrao);
+        }
+
+        // 3️⃣ SE FOR EDIÇÃO: Buscar os dados específicos desta turma e preencher o formulário
+        if (isEditing) {
+          const responseEspecifica = await api.get(`/classes/${id}`, { headers });
+          const turma = responseEspecifica.data;
+
+          // Verifica se o curso vindo do banco pertence aos padrões, senão ativa o customizado
+          if (cursosUnicosPadrao.includes(turma.curso)) {
+            setTurmaData({
+              nome: turma.nome || "",
+              ano_letivo: turma.ano_letivo || new Date().getFullYear(),
+              curso: turma.curso || "Ensino Secundário",
+              teacher_id: turma.teacher_id || turma.teacher?.id || "",
+            });
+          } else {
+            // Caso seja um curso customizado antigo, ativa o input de texto livre
+            setCursoCustomizado(true);
+            setNovoCursoNome(turma.curso || "");
+            setTurmaData({
+              nome: turma.nome || "",
+              ano_letivo: turma.ano_letivo || new Date().getFullYear(),
+              curso: "",
+              teacher_id: turma.teacher_id || turma.teacher?.id || "",
+            });
+          }
         }
 
       } catch (error) {
         console.error("Erro ao carregar dados iniciais do banco:", error);
-        setErros({ geral: "Erro ao conectar com o servidor para carregar professores." });
+        setErros({ geral: "Erro ao conectar com o servidor para carregar os dados da turma." });
       } finally {
         setCarregandoDados(false);
       }
     }
 
     carregarDadosIniciais();
-  }, []);
+  }, [id, isEditing]);
 
   // Alternador para curso novo escrito manualmente
   function handleAlternarCursoCustomizado() {
@@ -113,7 +141,7 @@ export default function CriarTurma() {
     navigate("/admin/turmas");
   }
 
-  // Submeter formulário para a API real
+  // Submeter formulário para a API (POST ou PUT)
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -123,22 +151,26 @@ export default function CriarTurma() {
     setErros({});
 
     const cursoFinal = cursoCustomizado ? novoCursoNome.trim() : turmaData.curso.trim();
+    
+    // Dados formatados para o back-end
+    const payload = {
+      nome: turmaData.nome,
+      ano_letivo: Number(turmaData.ano_letivo),
+      curso: cursoFinal,
+      teacher_id: Number(turmaData.teacher_id),
+    };
 
     try {
       const token = localStorage.getItem("@EduTrack:token");
+      const headers = { Authorization: `Bearer ${token}` };
 
-      await api.post(
-        "/classes",
-        {
-          nome: turmaData.nome,
-          ano_letivo: Number(turmaData.ano_letivo),
-          curso: cursoFinal,
-          teacher_id: Number(turmaData.teacher_id),
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      if (isEditing) {
+        // 📌 Modo Edição: Executa a rota PUT
+        await api.put(`/classes/${id}`, payload, { headers });
+      } else {
+        // 📌 Modo Criação: Executa a rota POST
+        await api.post("/classes", payload, { headers });
+      }
 
       setSucesso(true);
       setTimeout(() => {
@@ -146,7 +178,7 @@ export default function CriarTurma() {
       }, 1500);
 
     } catch (error) {
-      const msgErro = error.response?.data?.error || "Erro ao criar turma. Tente novamente.";
+      const msgErro = error.response?.data?.error || "Erro ao salvar dados da turma. Tente novamente.";
       setErros({ geral: msgErro });
     } finally {
       setCarregando(false);
@@ -160,7 +192,8 @@ export default function CriarTurma() {
 
   if (carregandoDados) {
     return (
-      <div className="criar-turma-page">
+      <div className="criar-turma-page-loading">
+        <div className="loading-spinner"></div>
         <p className="page-subtitle">Sincronizando dados com o servidor...</p>
       </div>
     );
@@ -169,12 +202,15 @@ export default function CriarTurma() {
   return (
     <div className="criar-turma-page">
       <div className="page-header">
-        <button className="btn-back" onClick={voltar}>
+        <button type="button" className="btn-back" onClick={voltar}>
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="page-title">Criar Turma</h1>
-          <p className="page-subtitle">Configure os dados da nova turma baseados no sistema real</p>
+          {/* 📌 Título Dinâmico */}
+          <h1 className="page-title">{isEditing ? "Editar Turma" : "Criar Turma"}</h1>
+          <p className="page-subtitle">
+            {isEditing ? `Modifique os dados da turma ID #${id}` : "Configure os dados da nova turma baseados no sistema real"}
+          </p>
         </div>
       </div>
 
@@ -183,7 +219,7 @@ export default function CriarTurma() {
           {erros.geral && <div className="alert alert-danger">{erros.geral}</div>}
           {sucesso && (
             <div className="alert alert-success">
-              ✓ Turma criada com sucesso! Redirecionando...
+              {isEditing ? "✓ Turma atualizada com sucesso! Redirecionando..." : "✓ Turma criada com sucesso! Redirecionando..."}
             </div>
           )}
 
@@ -222,15 +258,25 @@ export default function CriarTurma() {
             </div>
           </div>
 
-          {/* 📌 Campo de Curso Dinâmico e Customizável */}
+          {/* Campo de Curso Dinâmico e Customizável */}
           <div className="form-group">
-            <div style={{ display: "flex", justifyContent: "between", alignItems: "center", marginBottom: "4px" }}>
-              <label className="label" style={{ flex: 1 }}>Curso *</label>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label className="label" style={{ margin: 0 }}>Curso *</label>
               <button
                 type="button"
                 onClick={handleAlternarCursoCustomizado}
                 className="btn-link"
-                style={{ fontSize: "12px", background: "none", border: "none", color: "#3b82f6", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                style={{
+                  fontSize: "13px",
+                  background: "none",
+                  border: "none",
+                  color: "#3b82f6",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: 0
+                }}
               >
                 {cursoCustomizado ? (
                   <>
@@ -258,6 +304,7 @@ export default function CriarTurma() {
                 value={turmaData.curso}
                 onChange={(e) => setTurmaData({ ...turmaData, curso: e.target.value })}
               >
+                <option value="">Selecione um curso...</option>
                 {cursosDisponiveis.map((curso) => (
                   <option key={curso} value={curso}>
                     {curso}
@@ -276,8 +323,8 @@ export default function CriarTurma() {
           <div className="form-group">
             <label className="label">Professor *</label>
             {professoresDisponiveis.length === 0 ? (
-              <div className="empty-professores">
-                <p style={{ color: '#ef4444' }}>Nenhum professor cadastrado no banco de dados.</p>
+              <div className="empty-professores" style={{ padding: "12px", border: "1px dashed #ef4444", borderRadius: "6px", backgroundColor: "#fef2f2" }}>
+                <p style={{ color: '#ef4444', margin: 0, fontSize: "14px" }}>Nenhum professor cadastrado no banco de dados.</p>
               </div>
             ) : (
               <select
@@ -302,12 +349,13 @@ export default function CriarTurma() {
             </button>
             <button type="submit" className="btn btn-hero" disabled={carregando || professoresDisponiveis.length === 0}>
               <Save size={18} />
-              {carregando ? "Criando..." : "Criar Turma"}
+              {/* 📌 Botão Dinâmico */}
+              {carregando ? (isEditing ? "Salvando..." : "Criando...") : (isEditing ? "Salvar Alterações" : "Criar Turma")}
             </button>
           </div>
         </form>
 
-        {/* Card de Resumo */}
+        {/* Card de Resumo Lateral */}
         <div className="form-resumo">
           <h3>Resumo</h3>
           <div className="resumo-item">
